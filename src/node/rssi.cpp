@@ -4,7 +4,7 @@
 #else
 #include <util/atomic.h>
 #endif
-#include "Arduino.h"
+#include <Arduino.h>
 #include "FastRunningMedian.h"
 #include "rssi.h"
 
