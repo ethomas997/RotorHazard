@@ -33,10 +33,10 @@
 
 // ******************************************************************** //
 
-// *** Node Setup — Set node number here (1–8): ***
+// *** Node Setup - Set node number here (1-8): ***
 #define NODE_NUMBER 0
 
-// Set to 1–8 for manual selection.
+// Set to 1-8 for manual selection.
 // Leave at 0 for automatic selection via hardware pin.
 // For automatic selection, ground pins for each node:
 //                pin D4 open   pin D4 grounded
@@ -48,9 +48,6 @@
 // See https://github.com/RotorHazard/RotorHazard/blob/master/doc/Software%20Setup.md#receiver-nodes-arduinos
 
 // ******************************************************************** //
-
-
-
 
 
 // i2c address for node
@@ -107,40 +104,52 @@ static int ioBufferIndex = 0;
 // Initialize program
 void setup()
 {
-    if (!NODE_NUMBER) {
-      pinMode(4, INPUT_PULLUP);
-      pinMode(5, INPUT_PULLUP);
-      pinMode(6, INPUT_PULLUP);
-      pinMode(7, INPUT_PULLUP);
-      pinMode(8, INPUT_PULLUP);
+    if (!NODE_NUMBER)
+    {
+        pinMode(4, INPUT_PULLUP);
+        pinMode(5, INPUT_PULLUP);
+        pinMode(6, INPUT_PULLUP);
+        pinMode(7, INPUT_PULLUP);
+        pinMode(8, INPUT_PULLUP);
 
-      if (digitalRead(4) == HIGH) {
-        if (digitalRead(5) == LOW) {
-          i2cSlaveAddress = 8;
+        if (digitalRead(4) == HIGH)
+        {
+            if (digitalRead(5) == LOW)
+            {
+                i2cSlaveAddress = 8;
+            }
+            else if (digitalRead(6) == LOW)
+            {
+                i2cSlaveAddress = 10;
+            }
+            else if (digitalRead(7) == LOW)
+            {
+                i2cSlaveAddress = 12;
+            }
+            else if (digitalRead(8) == LOW)
+            {
+                i2cSlaveAddress = 14;
+            }
         }
-        else if (digitalRead(6) == LOW) {
-          i2cSlaveAddress = 10;
+        else
+        {
+            if (digitalRead(5) == LOW)
+            {
+                i2cSlaveAddress = 16;
+            }
+            else if (digitalRead(6) == LOW)
+            {
+                i2cSlaveAddress = 18;
+            }
+            else if (digitalRead(7) == LOW)
+            {
+                i2cSlaveAddress = 20;
+            }
+            else if (digitalRead(8) == LOW)
+            {
+                i2cSlaveAddress = 22;
+            }
         }
-        else if (digitalRead(7) == LOW) {
-          i2cSlaveAddress = 12;
-        }
-        else if (digitalRead(8) == LOW) {
-          i2cSlaveAddress = 14;
-        }
-      } else {
-        if (digitalRead(5) == LOW) {
-          i2cSlaveAddress = 16;
-        }
-        else if (digitalRead(6) == LOW) {
-          i2cSlaveAddress = 18;
-        }
-        else if (digitalRead(7) == LOW) {
-          i2cSlaveAddress = 20;
-        }
-        else if (digitalRead(8) == LOW) {
-          i2cSlaveAddress = 22;
-        }
-      }
     }
 
     Serial.begin(115200);  // Start serial for output/debugging
@@ -184,7 +193,7 @@ void setup()
 
     setRxModule(settings.vtxFreq);  // Setup rx module to default frequency
 
-	rssiInit();
+    rssiInit();
 }
 
 // Functions for the rx5808 module
@@ -302,13 +311,13 @@ void setRxModule(int frequency)
 // Read the RSSI value for the current channel
 rssi_t rssiRead()
 {
-  // reads 5V value as 0-1023, RX5808 is 3.3V powered so RSSI pin will never output the full range
+    // reads 5V value as 0-1023, RX5808 is 3.3V powered so RSSI pin will never output the full range
     int raw = analogRead(0);
     // clamp upper range to fit scaling
     if (raw > 0x01FF)
-      raw = 0x01FF;
+        raw = 0x01FF;
     // rescale to fit into a byte and remove some jitter
-    return raw>>1;
+    return raw >> 1;
 }
 
 #define FREQ_SET        0x01
@@ -322,43 +331,50 @@ static mtime_t loopMillis = 0;
 void loop()
 {
     mtime_t ms = millis();
-    if (ms > loopMillis) {
+    if (ms > loopMillis)
+    {
         loopMillis = ms;
         // read raw RSSI close to taking timestamp
         rssiProcess(rssiRead(), ms);
     }
 
-	/*** update settings ***/
+    /*** update settings ***/
 
-  uint8_t changeFlags;
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		changeFlags = settingChangedFlags;
-		settingChangedFlags = 0;
-	}
-	if (changeFlags & FREQ_SET) {
-		uint16_t newVtxFreq;
-		ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-			newVtxFreq = settings.vtxFreq;
-		}
-    setRxModule(newVtxFreq);
-    state.rxFreqSetFlag = true;
-    Serial.print(F("Set RX freq = "));
-    Serial.println(newVtxFreq);
+    uint8_t changeFlags;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+    {
+        changeFlags = settingChangedFlags;
+        settingChangedFlags = 0;
+    }
+    if (changeFlags & FREQ_SET)
+    {
+        uint16_t newVtxFreq;
+        ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+        {
+            newVtxFreq = settings.vtxFreq;
+        }
+        setRxModule(newVtxFreq);
+        state.rxFreqSetFlag = true;
+        Serial.print(F("Set RX freq = "));
+        Serial.println(newVtxFreq);
 
-		if (changeFlags & FREQ_CHANGED) {
-			writeWordToEeprom(EEPROM_ADRW_RXFREQ, newVtxFreq);
-			rssiStateReset();  // restart rssi peak tracking for node
-			Serial.println(F("Set nodeRssiPeak = 0, nodeRssiNadir = Max"));
-		}
-	}
+        if (changeFlags & FREQ_CHANGED)
+        {
+            writeWordToEeprom(EEPROM_ADRW_RXFREQ, newVtxFreq);
+            rssiStateReset();  // restart rssi peak tracking for node
+            Serial.println(F("Set nodeRssiPeak = 0, nodeRssiNadir = Max"));
+        }
+    }
 
-	if (changeFlags & ENTERAT_CHANGED) {
-    writeWordToEeprom(EEPROM_ADRW_ENTERAT, settings.enterAtLevel);
-	}
+    if (changeFlags & ENTERAT_CHANGED)
+    {
+        writeWordToEeprom(EEPROM_ADRW_ENTERAT, settings.enterAtLevel);
+    }
 
-	if (changeFlags & EXITAT_CHANGED) {
-    writeWordToEeprom(EEPROM_ADRW_EXITAT, settings.exitAtLevel);
-	}
+    if (changeFlags & EXITAT_CHANGED)
+    {
+        writeWordToEeprom(EEPROM_ADRW_EXITAT, settings.exitAtLevel);
+    }
 }
 
 
@@ -366,7 +382,7 @@ void loop()
 // or when master sets up a specific read request
 void i2cReceive(int byteCount)
 {  // Number of bytes in rx buffer
-   // If byteCount is zero, the master only checked for presence of the slave device, no response necessary
+// If byteCount is zero, the master only checked for presence of the slave device, no response necessary
     if (byteCount == 0)
     {
         Serial.println(F("Error: no bytes for a receive?"));
@@ -516,13 +532,15 @@ byte i2cHandleRx(byte command)
             if (readAndValidateIoBuffer(0x51, 2))
             {
                 u16val = ioBufferRead16();
-                if (u16val >= MIN_FREQ && u16val <= MAX_FREQ) {
-	                if (u16val != settings.vtxFreq) {
-		                settings.vtxFreq = u16val;
-	                    settingChangedFlags |= FREQ_CHANGED;
-	                }
-	                settingChangedFlags |= FREQ_SET;
-	                success = true;
+                if (u16val >= MIN_FREQ && u16val <= MAX_FREQ)
+                {
+                    if (u16val != settings.vtxFreq)
+                    {
+                        settings.vtxFreq = u16val;
+                        settingChangedFlags |= FREQ_CHANGED;
+                    }
+                    settingChangedFlags |= FREQ_SET;
+                    success = true;
                 }
             }
             break;
@@ -531,9 +549,10 @@ byte i2cHandleRx(byte command)
             if (readAndValidateIoBuffer(WRITE_ENTER_AT_LEVEL, 1))
             {
                 rssiVal = ioBufferReadRssi();
-                if (rssiVal != settings.enterAtLevel) {
-	            	settings.enterAtLevel = rssiVal;
-	                settingChangedFlags |= ENTERAT_CHANGED;
+                if (rssiVal != settings.enterAtLevel)
+                {
+                    settings.enterAtLevel = rssiVal;
+                    settingChangedFlags |= ENTERAT_CHANGED;
                 }
                 success = true;
             }
@@ -543,9 +562,10 @@ byte i2cHandleRx(byte command)
             if (readAndValidateIoBuffer(WRITE_EXIT_AT_LEVEL, 1))
             {
                 rssiVal = ioBufferReadRssi();
-                if (rssiVal != settings.exitAtLevel) {
-	            	settings.exitAtLevel = rssiVal;
-	                settingChangedFlags |= EXITAT_CHANGED;
+                if (rssiVal != settings.exitAtLevel)
+                {
+                    settings.exitAtLevel = rssiVal;
+                    settingChangedFlags |= EXITAT_CHANGED;
                 }
                 success = true;
             }
@@ -589,39 +609,45 @@ void i2cTransmit()
 
         case READ_LAP_STATS:
             {
-              mtime_t now = millis();
-              ioBufferWrite8(lastPass.lap);
-              ioBufferWrite16(uint16_t(now - lastPass.timestamp));  // ms since lap
-              ioBufferWriteRssi(state.rssi);
-              ioBufferWriteRssi(state.nodeRssiPeak);
-              ioBufferWriteRssi(lastPass.rssiPeak);  // RSSI peak for last lap pass
-              ioBufferWrite16(uint16_t(state.loopTimeMicros));
-              ioBufferWrite8(state.crossing ? (uint8_t) 1 : (uint8_t) 0);  // 'crossing' status
-              ioBufferWriteRssi(lastPass.rssiNadir);  // lowest rssi since end of last pass
-              ioBufferWriteRssi(state.nodeRssiNadir);
+            mtime_t now = millis();
+            ioBufferWrite8(lastPass.lap);
+            ioBufferWrite16(uint16_t(now - lastPass.timestamp));  // ms since lap
+            ioBufferWriteRssi(state.rssi);
+            ioBufferWriteRssi(state.nodeRssiPeak);
+            ioBufferWriteRssi(lastPass.rssiPeak);  // RSSI peak for last lap pass
+            ioBufferWrite16(uint16_t(state.loopTimeMicros));
+            ioBufferWrite8(state.crossing ? (uint8_t)1 : (uint8_t)0);  // 'crossing' status
+            ioBufferWriteRssi(lastPass.rssiNadir);  // lowest rssi since end of last pass
+            ioBufferWriteRssi(state.nodeRssiNadir);
 
-              if (isPeakValid(history.peakSendRssi)) {
-                  // send peak and reset
-                  ioBufferWriteRssi(history.peakSendRssi);
-                  ioBufferWrite16(uint16_t(now - history.peakSendFirstTime));
-                  ioBufferWrite16(uint16_t(now - history.peakSendLastTime));
-                  history.peakSendRssi = 0;
-              } else {
-                  ioBufferWriteRssi(0);
-                  ioBufferWrite16(0);
-                  ioBufferWrite16(0);
-              }
-
-              if (isNadirValid(history.nadirSendRssi)) {
-                  // send nadir and reset
-                  ioBufferWriteRssi(history.nadirSendRssi);
-                  ioBufferWrite16(uint16_t(now - history.nadirSendTime));
-                  history.nadirSendRssi = MAX_RSSI;
-              } else {
-                  ioBufferWriteRssi(0);
-                  ioBufferWrite16(0);
-              }
+            if (isPeakValid(history.peakSendRssi))
+            {
+                // send peak and reset
+                ioBufferWriteRssi(history.peakSendRssi);
+                ioBufferWrite16(uint16_t(now - history.peakSendFirstTime));
+                ioBufferWrite16(uint16_t(now - history.peakSendLastTime));
+                history.peakSendRssi = 0;
             }
+            else
+            {
+                ioBufferWriteRssi(0);
+                ioBufferWrite16(0);
+                ioBufferWrite16(0);
+            }
+
+            if (isNadirValid(history.nadirSendRssi))
+            {
+                // send nadir and reset
+                ioBufferWriteRssi(history.nadirSendRssi);
+                ioBufferWrite16(uint16_t(now - history.nadirSendTime));
+                history.nadirSendRssi = MAX_RSSI;
+            }
+            else
+            {
+                ioBufferWriteRssi(0);
+                ioBufferWrite16(0);
+            }
+        }
             break;
 
         case READ_ENTER_AT_LEVEL:  // lap pass begins when RSSI is at or above this level
@@ -648,17 +674,17 @@ void i2cTransmit()
             ioBufferWrite32(millis());
             break;
 
-        default:  // If an invalid command is sent, write nothing back, master must react
+            default:  // If an invalid command is sent, write nothing back, master must react
             Serial.print(F("TX Fault command: "));
             Serial.println(ioCommand, HEX);
-    }
+        }
 
     ioCommand = 0;  // Clear previous command
 
     if (ioBufferSize > 0)
     {  // If there is pending data, send it
         ioBufferWriteChecksum();
-        Wire.write((byte *) &ioBuffer, ioBufferSize);
+        Wire.write((byte *)&ioBuffer, ioBufferSize);
     }
 }
 
@@ -674,5 +700,5 @@ uint16_t readWordFromEeprom(int addr)
 {
     const uint8_t lb = EEPROM.read(addr);
     const uint8_t hb = EEPROM.read(addr + 1);
-    return (((uint16_t) hb) << 8) + lb;
+    return (((uint16_t)hb) << 8) + lb;
 }
