@@ -1252,6 +1252,15 @@ def hardware_set_all_frequencies(freqs):
     for idx in range(RACE.num_nodes):
         INTERFACE.set_frequency(idx, freqs[idx])
 
+def restore_node_frequency(node_index):
+    ''' Restore frequency for given node index (update hardware) '''
+    gevent.sleep(0.250)  # pause to get clear of heartbeat actions for scanner
+    profile = getCurrentProfile()
+    profile_freqs = json.loads(profile.frequencies)
+    freq = profile_freqs["f"][node_index]
+    INTERFACE.set_frequency(node_index, freq)
+    server_log('Frequency restored: Node {0} Frequency {1}'.format(node_index+1, freq))
+    
 @SOCKET_IO.on('set_enter_at_level')
 def on_set_enter_at_level(data):
     '''Set node enter-at level.'''
@@ -1347,9 +1356,8 @@ def on_set_scan(data):
         HEARTBEAT_DATA_RATE_FACTOR = 50
     else:
         HEARTBEAT_DATA_RATE_FACTOR = 5
-        profile = getCurrentProfile()
-        freqs = json.loads(profile.frequencies)
-        INTERFACE.set_frequency(node_index, freqs["f"][node_index])
+        gevent.sleep(0.100)  # pause/spawn to get clear of heartbeat actions for scanner
+        gevent.spawn(restore_node_frequency(node_index))
 
 @SOCKET_IO.on('add_heat')
 def on_add_heat():
