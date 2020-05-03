@@ -2,7 +2,7 @@
 RELEASE_VERSION = "2.2.0 (dev 4)" # Public release version code
 SERVER_API = 27 # Server API version
 NODE_API_SUPPORTED = 18 # Minimum supported node version
-NODE_API_BEST = 24 # Most recent node API
+NODE_API_BEST = 32 # Most recent node API
 JSON_API = 3 # JSON API version
 
 # This must be the first import for the time being. It is
@@ -88,6 +88,7 @@ FULL_RESULTS_CACHE_VALID = False # Whether cache is valid (False = regenerate ca
 DB_FILE_NAME = 'database.db'
 DB_BKP_DIR_NAME = 'db_bkp'
 IMDTABLER_JAR_NAME = 'static/IMDTabler.jar'
+CMDARG_JUMP_TO_BL_STR = '--jumptobl'  # command-line argument: send jump-to-bootloader command to node
 
 TEAM_NAMES_LIST = [str(unichr(i)) for i in range(65, 91)]  # list of 'A' to 'Z' strings
 DEF_TEAM_NAME = 'A'  # default team
@@ -4062,6 +4063,7 @@ def pass_record_callback(node, lap_timestamp_absolute, source):
             .format(node.index+1))
 
 def new_enter_or_exit_at_callback(node, is_enter_at_flag):
+    gevent.sleep(0.025)  # delay to avoid potential I/O error
     if is_enter_at_flag:
         logger.info('Finished capture of enter-at level for node {0}, level={1}, count={2}'.format(node.index+1, node.enter_at_level, node.cap_enter_at_count))
         on_set_enter_at_level({
@@ -4618,6 +4620,22 @@ def init_LED_effects():
     for item in effects:
         led_manager.setEventEffect(item, effects[item])
 
+def stop_heartbeart_thread():
+    global HEARTBEAT_THREAD
+    if HEARTBEAT_THREAD:
+        logger.info('Stopping heartbeat thread')
+        HEARTBEAT_THREAD.kill(block=True, timeout=0.5)
+        HEARTBEAT_THREAD = None
+
+def jump_to_node_bootloader():
+    try:
+        stop_heartbeart_thread()
+        INTERFACE.stop()
+        INTERFACE.jump_to_bootloader()
+    except Exception as ex:
+        logger.info('Error executing jump to node bootloader:  ' + str(ex))
+    
+
 #
 # Program Initialize
 #
@@ -4640,6 +4658,10 @@ if not INTERFACE or not INTERFACE.nodes or len(INTERFACE.nodes) <= 0:
         except ImportError:
             print "Unable to import library for serial node(s) - is 'pyserial' installed?"
         sys.exit()
+
+if len(sys.argv) > 0 and CMDARG_JUMP_TO_BL_STR in sys.argv:
+    jump_to_node_bootloader()
+    sys.exit(0)
 
 CLUSTER = Cluster()
 hasMirrors = False

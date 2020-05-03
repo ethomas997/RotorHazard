@@ -1,6 +1,7 @@
 #ifndef rhtypes_h
 #define rhtypes_h
 
+#include <stdint.h>
 #include <inttypes.h>
 
 // semantic types

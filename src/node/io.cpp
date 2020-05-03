@@ -10,7 +10,7 @@ uint16_t ioBufferRead16(Buffer_t *buf)
 {
     uint16_t result;
     result = buf->data[buf->index++];
-    result = (result << 8) | buf->data[buf->index++];
+    result = (result << (uint16_t)8) | buf->data[buf->index++];
     return result;
 }
 
@@ -31,15 +31,15 @@ void ioBufferWrite8(Buffer_t *buf, uint8_t data)
 
 void ioBufferWrite16(Buffer_t *buf, uint16_t data)
 {
-    buf->data[buf->size++] = (data >> 8);
-    buf->data[buf->size++] = data;
+    buf->data[buf->size++] = (uint8_t)(((data >> (uint16_t)8)) & (uint16_t)0xFF);
+    buf->data[buf->size++] = (uint8_t)(data & (uint16_t)0xFF);
 }
 
 void ioBufferWrite32(Buffer_t *buf, uint32_t data)
 {
-    buf->data[buf->size++] = (data >> 24);
-    buf->data[buf->size++] = (data >> 16);
-    buf->data[buf->size++] = (data >> 8);
+    buf->data[buf->size++] = (uint8_t)(((data >> (uint16_t)24)) & (uint16_t)0xFF);
+    buf->data[buf->size++] = (uint8_t)(((data >> (uint16_t)16)) & (uint16_t)0xFF);
+    buf->data[buf->size++] = (uint8_t)(((data >> (uint16_t)8)) & (uint16_t)0xFF);
     buf->data[buf->size++] = data;
 }
 
