@@ -3423,6 +3423,15 @@ def emit_current_heat(**params):
     else:
         SOCKET_IO.emit('current_heat', emit_payload)
 
+def emit_team_racing_stat_if_enb(**params):
+    '''Emits team-racing status info if team racing is enabled.'''
+    global RACE
+    race_format = RACE.format
+    if race_format.team_racing_mode:
+        check_emit_race_status_message(RACE, **params)
+    else:
+        emit_race_status_message( **params)
+
 def emit_race_status_message(**params):
     '''Emits given team-racing status info.'''
     global RACE
@@ -3763,6 +3772,34 @@ def check_emit_race_status_message(RACE, **params):
     race_format = getCurrentRaceFormat()
     if RACE.win_status != WinStatus.DECLARED and \
         RACE.win_status != WinStatus.TIE: # don't overwrite declared winner
+        if race_format.team_racing_mode: # team racing mode enabled
+            RACE.status_message = ''
+            team_info = Results.calc_team_leaderboard(RACE)
+            for team in team_info:
+                RACE.status_message += ' <span class="team-laps">' + __('Team') + ' ' + str(team['name']) + ': '
+
+                if race_format.win_condition == WinCondition.MOST_LAPS or \
+                    race_format.win_condition == WinCondition.FIRST_TO_LAP_X:
+                    RACE.status_message += str(team['laps'])
+                elif race_format.win_condition == WinCondition.FASTEST_LAP:
+                    if team['combined_fastest_lap_raw']:
+                        RACE.status_message += str(team['contributing']) + '/' + str(team['members']) + '|' + RHUtils.time_format(team['combined_fastest_lap_raw'])
+                    else:
+                        RACE.status_message += str(team['contributing']) + '/' + str(team['members'])
+                elif race_format.win_condition == WinCondition.FASTEST_3_CONSECUTIVE:
+                    if team['combined_consecutives_raw']:
+                        RACE.status_message += str(team['contributing']) + '/' + str(team['members']) + '|' + RHUtils.time_format(team['combined_consecutives_raw'])
+                    else:
+                        RACE.status_message += str(team['contributing']) + '/' + str(team['members'])
+
+                RACE.status_message += '</span>'
+
+        emit_race_status_message(**params)
+
+def check_emit_race_status_message(RACE, **params):
+    race_format = getCurrentRaceFormat()
+    if RACE.win_status != WinStatus.DECLARED and \
+        RACE.win_status != WinStatus.TIE: # don't overwrite declared winner
 
         emit_race_status_message(**params)
 
@@ -3864,72 +3901,6 @@ def pass_record_callback(node, lap_timestamp_absolute, source):
                         elif lap_number == 0:
                             emit_first_pass_registered(node.index) # play first-pass sound
 
-<<<<<<< HEAD
-                            # if win condition is first-to-x-laps and x is valid
-                            #  then check if a team has enough laps to win
-                            if race_format.win_condition == WinCondition.FIRST_TO_LAP_X and race_format.number_laps_win > 0:
-                                t_laps_dict, team_name, pilot_team_dict = \
-                                    get_team_laps_info(pilot_id, race_format.number_laps_win)
-                                team_laps = t_laps_dict[team_name][0]
-                                check_team_laps_win(t_laps_dict, race_format.number_laps_win, pilot_team_dict, node.index)
-                            else:
-                                t_laps_dict, team_name, pilot_team_dict = get_team_laps_info(pilot_id, RACE.winning_lap_id)
-                                team_laps = t_laps_dict[team_name][0]
-                            check_emit_team_racing_status(t_laps_dict)
-
-                            if lap_number > 0:   # send phonetic data to be spoken
-                                emit_phonetic_data(pilot_id, lap_number, lap_time, team_name, team_laps)
-
-                                # if Most Laps Wins race is tied then check for winner
-                                if race_format.win_condition == WinCondition.MOST_LAPS:
-                                    if RACE.laps_winner_name is RACE.status_tied_str or \
-                                                RACE.laps_winner_name is RACE.status_crossing:
-                                        check_most_laps_win(node.index, t_laps_dict, pilot_team_dict)
-
-                                # if a team has won the race and this is the winning lap
-                                elif RACE.laps_winner_name is not None and \
-                                            team_name == RACE.laps_winner_name and \
-                                            team_laps >= race_format.number_laps_win:
-                                    emit_phonetic_text('Winner is team ' + RACE.laps_winner_name, 'race_winner')
-                            elif lap_number == 0:
-                                emit_first_pass_registered(node.index) # play first-pass sound
-
-                        else:  # not team racing mode
-                            if lap_number > 0:
-                                                # send phonetic data to be spoken
-                                if race_format.win_condition != WinCondition.FIRST_TO_LAP_X or race_format.number_laps_win <= 0:
-                                    emit_phonetic_data(pilot_id, lap_number, lap_time, None, None)
-
-                                                     # if Most Laps Wins race is tied then check for winner
-                                    if race_format.win_condition == WinCondition.MOST_LAPS:
-                                        if RACE.laps_winner_name is RACE.status_tied_str or \
-                                                    RACE.laps_winner_name is RACE.status_crossing:
-                                            check_most_laps_win(node.index)
-
-                                else:           # need to check if any pilot has enough laps to win
-                                    if race_format.win_condition == WinCondition.FIRST_TO_LAP_X:
-                                        win_pilot_id = check_pilot_laps_win(node.index, race_format.number_laps_win)
-                                        if win_pilot_id >= 0:  # a pilot has won the race
-                                            win_callsign = Database.Pilot.query.get(win_pilot_id).callsign
-                                            emit_team_racing_status('Winner is ' + win_callsign)
-                                            emit_phonetic_data(pilot_id, lap_number, lap_time, None, None)
-
-                                            if RACE.laps_winner_name is None:
-                                                    # a pilot has won the race and has not yet been announced
-                                                win_phon_name = Database.Pilot.query.get(win_pilot_id).phonetic
-                                                if len(win_phon_name) <= 0:  # if no phonetic then use callsign
-                                                    win_phon_name = win_callsign
-                                                RACE.laps_winner_name = win_callsign  # call out winner (once)
-                                                emit_phonetic_text('Winner is ' + win_phon_name, 'race_winner')
-
-                                        else:  # no pilot has won the race; send phonetic data to be spoken
-                                            emit_phonetic_data(pilot_id, lap_number, lap_time, None, None)
-                                    else:  # other win conditions
-                                            emit_phonetic_data(pilot_id, lap_number, lap_time, None, None)
-                            elif lap_number == 0:
-                                emit_first_pass_registered(node.index) # play first-pass sound
-=======
->>>>>>> Win Condition development
                     else:
                         # record lap as 'deleted'
                         RACE.node_laps[node.index].append({
@@ -3950,9 +3921,7 @@ def pass_record_callback(node, lap_timestamp_absolute, source):
         logger.debug('Pass record dismissed: Node: {0}, Frequency not defined' \
             .format(node.index+1))
 
-<<<<<<< HEAD
 @catchLogExceptionsWrapper
-=======
 def check_win_condition(RACE, INTERFACE):
     tied_flag = (RACE.win_status == WinStatus.TIE)
 
@@ -3982,7 +3951,6 @@ def check_win_condition(RACE, INTERFACE):
                 emit_race_status_message()
                 emit_phonetic_text(RACE.status_message, 'race_winner')
 
->>>>>>> Win Condition development
 def new_enter_or_exit_at_callback(node, is_enter_at_flag):
     if is_enter_at_flag:
         logger.info('Finished capture of enter-at level for node {0}, level={1}, count={2}'.format(node.index+1, node.enter_at_level, node.cap_enter_at_count))
