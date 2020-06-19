@@ -73,13 +73,6 @@ class WinStatus():
     DECLARED = 3
     DECLARED_TIE = 4
 
-class WinStatus():
-    NONE = 0
-    TIE = 1
-    PENDING_CROSSING = 2
-    DECLARED = 3
-    DECLARED_TIE = 4
-
 class RaceStatus():
     READY = 0
     STAGING = 3
