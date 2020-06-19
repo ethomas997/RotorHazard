@@ -3423,15 +3423,6 @@ def emit_current_heat(**params):
     else:
         SOCKET_IO.emit('current_heat', emit_payload)
 
-def emit_team_racing_stat_if_enb(**params):
-    '''Emits team-racing status info if team racing is enabled.'''
-    global RACE
-    race_format = RACE.format
-    if race_format.team_racing_mode:
-        check_emit_race_status_message(RACE, **params)
-    else:
-        emit_race_status_message( **params)
-
 def emit_race_status_message(**params):
     '''Emits given team-racing status info.'''
     global RACE
@@ -3772,27 +3763,6 @@ def check_emit_race_status_message(RACE, **params):
     race_format = getCurrentRaceFormat()
     if RACE.win_status != WinStatus.DECLARED and \
         RACE.win_status != WinStatus.TIE: # don't overwrite declared winner
-        if race_format.team_racing_mode: # team racing mode enabled
-            RACE.status_message = ''
-            team_info = Results.calc_team_leaderboard(RACE)
-            for team in team_info:
-                RACE.status_message += ' <span class="team-laps">' + __('Team') + ' ' + str(team['name']) + ': '
-
-                if race_format.win_condition == WinCondition.MOST_LAPS or \
-                    race_format.win_condition == WinCondition.FIRST_TO_LAP_X:
-                    RACE.status_message += str(team['laps'])
-                elif race_format.win_condition == WinCondition.FASTEST_LAP:
-                    if team['combined_fastest_lap_raw']:
-                        RACE.status_message += str(team['contributing']) + '/' + str(team['members']) + '|' + RHUtils.time_format(team['combined_fastest_lap_raw'])
-                    else:
-                        RACE.status_message += str(team['contributing']) + '/' + str(team['members'])
-                elif race_format.win_condition == WinCondition.FASTEST_3_CONSECUTIVE:
-                    if team['combined_consecutives_raw']:
-                        RACE.status_message += str(team['contributing']) + '/' + str(team['members']) + '|' + RHUtils.time_format(team['combined_consecutives_raw'])
-                    else:
-                        RACE.status_message += str(team['contributing']) + '/' + str(team['members'])
-
-                RACE.status_message += '</span>'
 
         emit_race_status_message(**params)
 
