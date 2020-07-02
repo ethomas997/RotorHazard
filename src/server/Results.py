@@ -805,7 +805,7 @@ def check_win_laps_and_time(RACE, INTERFACE):
                 for line in leaderboard[1:]:
                     if line['laps'] >= lead_lap - 1:
                         node = INTERFACE.nodes[line['node']]
-                        if node.crossing_flag:
+                        if node.pass_crossing_flag:
                             logger.info('Waiting for node {0} crossing to decide winner'.format(line['node']+1))
                             return {
                                 'status': WinStatus.PENDING_CROSSING
@@ -843,7 +843,7 @@ def check_win_most_laps(RACE, INTERFACE):
                 for line in leaderboard[1:]:
                     if line['laps'] >= lead_lap - 1:
                         node = INTERFACE.nodes[line['node']]
-                        if node.crossing_flag:
+                        if node.pass_crossing_flag:
                             logger.info('Waiting for node {0} crossing to decide winner'.format(line['node']+1))
                             return {
                                 'status': WinStatus.PENDING_CROSSING
@@ -880,7 +880,7 @@ def check_win_first_to_x(RACE, INTERFACE):
                 for line in leaderboard[1:]: # check lower position
                     if line['laps'] >= lead_lap - 1:
                         node = INTERFACE.nodes[line['node']]
-                        if node.crossing_flag:
+                        if node.pass_crossing_flag:
                             logger.info('Waiting for node {0} crossing to decide winner'.format(line['node']+1))
                             return {
                                 'status': WinStatus.PENDING_CROSSING
@@ -970,7 +970,7 @@ def check_win_team_laps_and_time(RACE, INTERFACE):
                 # prevent win declaration if there are active crossings
                 for line in individual_leaderboard:
                     node = INTERFACE.nodes[line['node']]
-                    if node.crossing_flag:
+                    if node.pass_crossing_flag:
                         logger.info('Waiting for node {0} crossing to decide winner'.format(line['node']+1))
                         return {
                             'status': WinStatus.PENDING_CROSSING
@@ -1005,7 +1005,7 @@ def check_win_team_most_laps(RACE, INTERFACE):
                 # prevent win declaration if there are active crossings
                 for line in individual_leaderboard:
                     node = INTERFACE.nodes[line['node']]
-                    if node.crossing_flag:
+                    if node.pass_crossing_flag:
                         logger.info('Waiting for node {0} crossing to decide winner'.format(line['node']+1))
                         return {
                             'status': WinStatus.PENDING_CROSSING
@@ -1039,7 +1039,7 @@ def check_win_team_first_to_x(RACE, INTERFACE):
                 # prevent win declaration if there are active crossings
                 for line in individual_leaderboard:
                     node = INTERFACE.nodes[line['node']]
-                    if node.crossing_flag:
+                    if node.pass_crossing_flag:
                         logger.info('Waiting for node {0} crossing to decide winner'.format(line['node']+1))
                         return {
                             'status': WinStatus.PENDING_CROSSING
