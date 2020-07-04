@@ -2,7 +2,7 @@
 RELEASE_VERSION = "2.3.0-dev.3" # Public release version code
 SERVER_API = 28 # Server API version
 NODE_API_SUPPORTED = 18 # Minimum supported node version
-NODE_API_BEST = 25 # Most recent node API
+NODE_API_BEST = 32 # Most recent node API
 JSON_API = 3 # JSON API version
 
 # This must be the first import for the time being. It is
@@ -99,6 +99,7 @@ if RHUtils.checkSetFileOwnerPi(log.LOG_DIR_NAME):
 CMDARG_VERSION_LONG_STR = '--version'  # show program version and exit
 CMDARG_VERSION_SHORT_STR = '-v'        # show program version and exit
 CMDARG_ZIP_LOGS_STR = '--ziplogs'      # create logs .zip file
+CMDARG_JUMP_TO_BL_STR = '--jumptobl'   # send jump-to-bootloader command to node
 
 if __name__ == '__main__' and len(sys.argv) > 1:
     if CMDARG_VERSION_LONG_STR in sys.argv or CMDARG_VERSION_SHORT_STR in sys.argv:
@@ -106,7 +107,9 @@ if __name__ == '__main__' and len(sys.argv) > 1:
     if CMDARG_ZIP_LOGS_STR in sys.argv:
         log.create_log_files_zip(logger, Config.CONFIG_FILE_NAME, DB_FILE_NAME)
         sys.exit(0)
-    print("Unrecognized command-line argument(s): {0}".format(sys.argv[1:]))
+    if CMDARG_JUMP_TO_BL_STR not in sys.argv:  # handle jump-to-bootloader argument later
+        print("Unrecognized command-line argument(s): {0}".format(sys.argv[1:]))
+        sys.exit(0)
 
 TEAM_NAMES_LIST = [str(unichr(i)) for i in range(65, 91)]  # list of 'A' to 'Z' strings
 DEF_TEAM_NAME = 'A'  # default team
@@ -4274,6 +4277,7 @@ def pass_record_callback(node, lap_timestamp_absolute, source):
 
 @catchLogExceptionsWrapper
 def new_enter_or_exit_at_callback(node, is_enter_at_flag):
+    gevent.sleep(0.025)  # delay to avoid potential I/O error
     if is_enter_at_flag:
         logger.info('Finished capture of enter-at level for node {0}, level={1}, count={2}'.format(node.index+1, node.enter_at_level, node.cap_enter_at_count))
         on_set_enter_at_level({
@@ -4883,6 +4887,22 @@ def killVRxController(*args):
     logger.info('Killing VRxController')
     vrx_controller = None
 
+def stop_heartbeart_thread():
+    global HEARTBEAT_THREAD
+    if HEARTBEAT_THREAD:
+        logger.info('Stopping heartbeat thread')
+        HEARTBEAT_THREAD.kill(block=True, timeout=0.5)
+        HEARTBEAT_THREAD = None
+
+def jump_to_node_bootloader():
+    try:
+        stop_heartbeart_thread()
+        INTERFACE.stop()
+        INTERFACE.jump_to_bootloader()
+    except Exception as ex:
+        logger.info('Error executing jump to node bootloader:  ' + str(ex))
+    
+
 #
 # Program Initialize
 #
@@ -4924,6 +4944,10 @@ if not INTERFACE or not INTERFACE.nodes or len(INTERFACE.nodes) <= 0:
             logger.info("Unable to import library for serial node(s) - is 'pyserial' installed?")
         log.wait_for_queue_empty()
         sys.exit()
+
+if len(sys.argv) > 0 and CMDARG_JUMP_TO_BL_STR in sys.argv:
+    jump_to_node_bootloader()
+    sys.exit(0)
 
 CLUSTER = ClusterNodeSet()
 hasMirrors = False
