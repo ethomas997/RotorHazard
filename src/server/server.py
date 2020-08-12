@@ -3763,9 +3763,7 @@ def check_race_time_expired(RACE):
 
 def check_emit_race_status_message(RACE, **params):
     race_format = getCurrentRaceFormat()
-    if RACE.win_status != WinStatus.DECLARED and \
-        RACE.win_status != WinStatus.TIE: # don't overwrite declared winner
-
+    if RACE.win_status not in [WinStatus.DECLARED, WinStatus.TIE]: # don't call after declared result
         emit_race_status_message(**params)
 
 def check_emit_race_status_message(RACE, **params):
