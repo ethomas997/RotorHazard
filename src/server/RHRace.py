@@ -21,6 +21,7 @@ class RHRace():
         self.start_time_epoch_ms = 0 # ms since 1970-01-01
         self.start_time_delay_secs = 0 # random-length race-start delay
         self.node_laps = {} # current race lap objects, by node
+        self.node_has_finished = {}
         # concluded
         self.duration_ms = 0 # Duration in seconds, calculated when race is stopped
         self.end_time = 0 # Monotonic, updated when race is stopped
