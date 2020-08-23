@@ -261,6 +261,9 @@ class Slave:
                         split_time_formatted=split_time_str, split_speed=split_speed))
                 DB.session.commit()
                 emit_current_laps() # update all laps on the race page
+
+                emit_phonetic_split(pilot_id, split_id, split_time);
+        
         else:
             logger.info('Split pass record dismissed: Node: {0}, Frequency not defined' \
                 .format(node_index+1))
@@ -4162,6 +4165,23 @@ def emit_phonetic_text(text_str, domain=False, **params):
     emit_payload = {
         'text': text_str,
         'domain': domain
+    }
+    if ('nobroadcast' in params):
+        emit('phonetic_text', emit_payload)
+    else:
+        SOCKET_IO.emit('phonetic_text', emit_payload)
+
+def emit_phonetic_split(pilot_id, split_id, split_time, **params):
+    '''Emits phonetic split-pass data.'''
+    phonetic_name = Database.Pilot.query.get(pilot_id).phonetic or Database.Pilot.query.get(pilot_id).callsign
+    phonetic_time = RHUtils.phonetictime_format(split_time)
+    text_str = phonetic_name +  " split"
+    if split_id:
+        text_str += " " + str(split_id+1)
+    text_str += ", " + phonetic_time
+    emit_payload = {
+        'text': text_str,
+        'domain': False
     }
     if ('nobroadcast' in params):
         emit('phonetic_text', emit_payload)
