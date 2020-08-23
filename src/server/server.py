@@ -17,7 +17,9 @@ log.early_stage_setup()
 logger = logging.getLogger(__name__)
 
 EPOCH_START = datetime(1970, 1, 1)
-PROGRAM_START_TIMESTAMP = int((datetime.now() - EPOCH_START).total_seconds() * 1000)
+
+# program-start time, in milliseconds since 1970-01-01
+PROGRAM_START_EPOCH_TIME = int((datetime.now() - EPOCH_START).total_seconds() * 1000)
 
 logger.info('RotorHazard v{0}'.format(RELEASE_VERSION))
 
@@ -128,15 +130,19 @@ Use_imdtabler_jar_flag = False  # set True if IMDTabler.jar is available
 
 RACE = get_race_state() # For storing race management variables
 
-PROGRAM_START = monotonic()
-PROGRAM_START_MILLIS_OFFSET = 1000.0*PROGRAM_START - PROGRAM_START_TIMESTAMP
+# program-start time (in milliseconds, starting at zero)
+PROGRAM_START_MTONIC = monotonic()
+
+# offset for converting 'monotonic' time to epoch milliseconds since 1970-01-01
+MTONIC_TO_EPOCH_MILLIS_OFFSET = PROGRAM_START_EPOCH_TIME - 1000.0*PROGRAM_START_MTONIC
 
 TONES_NONE = 0
 TONES_ONE = 1
 TONES_ALL = 2
 
-def monotonic_to_milliseconds(secs):
-    return 1000.0*secs - PROGRAM_START_MILLIS_OFFSET
+# convert 'monotonic' time to epoch milliseconds since 1970-01-01
+def monotonic_to_epoch_millis(secs):
+    return 1000.0*secs + MTONIC_TO_EPOCH_MILLIS_OFFSET
 
 #
 # Slaves
@@ -155,6 +161,8 @@ class Slave:
             addr = 'http://'+addr
         self.address = addr
         self.lastContact = -1
+        self.race_start_epoch = 0
+        self.clock_warning_flag = False
         self.sio = socketio.Client()
         self.sio.on('connect', self.on_connect)
         self.sio.on('disconnect', self.on_disconnect)
@@ -195,13 +203,16 @@ class Slave:
 
         if pilot_id != Database.PILOT_ID_NONE:
 
-            split_ts = data['timestamp'] + (PROGRAM_START_MILLIS_OFFSET - 1000.0*RACE.start_time_monotonic)
+            # convert split timestamp (epoch ms sine 1970-01-01) to equivalent local 'monotonic' time value
+            split_ts = data['timestamp'] - RACE.start_time_epoch_ms
 
             lap_count = max(0, len(RACE.get_active_laps()[node_index]) - 1)
 
-            if lap_count:
-                last_lap_ts = RACE.get_active_laps()[node_index][-1]['lap_time_stamp']
-            else: # first lap
+            # get timestamp for last lap pass (including lap 0)
+            act_laps_list = RACE.get_active_laps()[node_index]
+            if len(act_laps_list) > 0:
+                last_lap_ts = act_laps_list[-1]['lap_time_stamp']
+            else:
                 last_lap_ts = 0
 
             split_id = self.id
@@ -220,15 +231,34 @@ class Slave:
                     last_split_ts = None
 
             if last_split_ts is not None:
+
+                # get race-start time value from slave (or previously received and saved value)
+                slv_rs_epoch = data.get('race_start_epoch', 0) or self.race_start_epoch
+                if slv_rs_epoch > 0:
+                    self.race_start_epoch = slv_rs_epoch  # save race-start time for future laps
+                    # compare the local race-start epoch time to the slave's
+                    rs_epoch_diff = RACE.start_time_epoch_ms - slv_rs_epoch
+                    # if slave timer's clock is too far off then correct as best we can
+                    #  using estimated difference in race-start epoch times
+                    if abs(rs_epoch_diff) > 1000:
+                        split_ts += rs_epoch_diff
+                        if not self.clock_warning_flag:
+                            logger.warn("Slave timer clock not synchronized to master, offset={0:.1f}ms, split={1}".\
+                                        format((-rs_epoch_diff), split_id+1))
+                            self.clock_warning_flag = True
+                        logger.debug("Correcting slave-time offset ({0:.1f}ms), new split_ts={1:.1f}, split={2}".\
+                                     format((-rs_epoch_diff), split_ts, split_id+1))
+
                 split_time = split_ts - last_split_ts
                 split_speed = float(self.info['distance'])*1000.0/float(split_time) if 'distance' in self.info else None
-                logger.debug('Split pass record: Node: {0}, Lap: {1}, Split time: {2}, Split speed: {3}' \
-                    .format(node_index+1, lap_count+1, RHUtils.time_format(split_time), \
+                split_time_str = RHUtils.time_format(split_time)
+                logger.debug('Split pass record: Node {0}, lap {1}, split {2}, time={3}, speed={4}' \
+                    .format(node_index+1, lap_count+1, split_id+1, split_time_str, \
                     ('{0:.2f}'.format(split_speed) if split_speed is not None else 'None')))
 
-                DB.session.add(Database.LapSplit(node_index=node_index, pilot_id=pilot_id, lap_id=lap_count, split_id=split_id, \
-                    split_time_stamp=split_ts, split_time=split_time, split_time_formatted=RHUtils.time_format(split_time), \
-                    split_speed=split_speed))
+                DB.session.add(Database.LapSplit(node_index=node_index, pilot_id=pilot_id, lap_id=lap_count, \
+                        split_id=split_id, split_time_stamp=split_ts, split_time=split_time, \
+                        split_time_formatted=split_time_str, split_speed=split_speed))
                 DB.session.commit()
                 emit_current_laps() # update all laps on the race page
         else:
@@ -926,7 +956,7 @@ def on_get_timestamp():
         now = RACE.start_time_monotonic
     else:
         now = monotonic()
-    return {'timestamp': monotonic_to_milliseconds(now)}
+    return {'timestamp': monotonic_to_epoch_millis(now)}
 
 @SOCKET_IO.on('get_settings')
 @catchLogExceptionsWrapper
@@ -944,8 +974,6 @@ def on_reset_auto_calibration(data):
     on_discard_laps()
     setCurrentRaceFormat(SLAVE_RACE_FORMAT)
     emit_race_format()
-    Options.set("MinLapSec", "0")
-    Options.set("MinLapBehavior", "0")
     on_stage_race()
 
 # Cluster events
@@ -954,9 +982,8 @@ def on_reset_auto_calibration(data):
 @catchLogExceptionsWrapper
 def on_join_cluster():
     setCurrentRaceFormat(SLAVE_RACE_FORMAT)
+    getCurrentRaceFormat().cluster_flag = True
     emit_race_format()
-    Options.set("MinLapSec", "0")
-    Options.set("MinLapBehavior", "0")
     logger.debug('Joined cluster')
 
     Events.trigger(Evt.CLUSTER_JOIN)
@@ -2117,6 +2144,7 @@ def on_stage_race():
         DELAY = random.randint(MIN, MAX) + 0.9 # Add ~1 for prestage (<1 to prevent timer beep)
 
         RACE.start_time_monotonic = monotonic() + DELAY
+        RACE.start_time_epoch_ms = monotonic_to_epoch_millis(RACE.start_time_monotonic)
         RACE.start_token = random.random()
         gevent.spawn(race_start_thread, RACE.start_token)
 
@@ -2287,7 +2315,7 @@ def race_start_thread(start_token):
         RACE.laps_winner_name = None  # name of winner in first-to-X-laps race
         RACE.winning_lap_id = 0  # track winning lap-id if race tied during first-to-X-laps race
         emit_race_status() # Race page, to set race button states
-        logger.info('Race started at {0} ({1:13f})'.format(RACE.start_time_monotonic, monotonic_to_milliseconds(RACE.start_time_monotonic)))
+        logger.info('Race started at {0} ({1:.1f})'.format(RACE.start_time_monotonic, RACE.start_time_epoch_ms))
 
 @SOCKET_IO.on('stop_race')
 @catchLogExceptionsWrapper
@@ -2302,7 +2330,7 @@ def on_stop_race():
         milli_sec = delta_time * 1000.0
         RACE.duration_ms = milli_sec
 
-        logger.info('Race stopped at {0} ({1:13f}), duration {2}ms'.format(RACE.end_time, monotonic_to_milliseconds(RACE.end_time), RACE.duration_ms))
+        logger.info('Race stopped at {0} ({1:.1f}), duration {2}ms'.format(RACE.end_time, monotonic_to_epoch_millis(RACE.end_time), RACE.duration_ms))
 
         min_laps_list = []  # show nodes with laps under minimum (if any)
         for node in INTERFACE.nodes:
@@ -4276,6 +4304,18 @@ def set_vrx_node(data):
     else:
         logger.error("Can't set VRx {0} to node {1}: Controller unavailable".format(vrx_id, node))
 
+@catchLogExceptionsWrapper
+def emit_pass_record(node, lap_time_stamp, inc_rsepoch_flag = False):
+    '''Emits 'pass_record' message (will be consumed by slave timers in cluster, etc).'''
+    payload = {
+        'node': node.index,
+        'frequency': node.frequency,
+        'timestamp': lap_time_stamp + RACE.start_time_epoch_ms
+    }
+    if inc_rsepoch_flag:
+        payload['race_start_epoch'] = RACE.start_time_epoch_ms
+    SOCKET_IO.emit('pass_record', payload)
+
 #
 # Program Functions
 #
@@ -4377,7 +4417,7 @@ def ms_to_race_start():
 
 def ms_from_program_start():
     '''Returns the elapsed milliseconds since the start of the program.'''
-    delta_time = monotonic() - PROGRAM_START
+    delta_time = monotonic() - PROGRAM_START_MTONIC
     milli_sec = delta_time * 1000.0
     return milli_sec
 
@@ -4437,8 +4477,14 @@ def pass_record_callback(node, lap_timestamp_absolute, source):
                         node.first_cross_flag = True  # indicate first crossing completed
 
                     race_format = getCurrentRaceFormat()
-                    min_lap = Options.getInt("MinLapSec")
-                    min_lap_behavior = Options.getInt("MinLapBehavior")
+                    if race_format is SLAVE_RACE_FORMAT:
+                        min_lap = 0  # don't enforce min-lap time if running as slave timer
+                        min_lap_behavior = 0
+                        cluster_flag = getattr(race_format, 'cluster_flag', False)
+                    else:
+                        min_lap = Options.getInt("MinLapSec")
+                        min_lap_behavior = Options.getInt("MinLapBehavior")
+                        cluster_flag = False
 
                     lap_ok_flag = True
                     if lap_number != 0:  # if initial lap then always accept and don't check lap time; else:
@@ -4450,11 +4496,12 @@ def pass_record_callback(node, lap_timestamp_absolute, source):
                                 lap_ok_flag = False
 
                     if lap_ok_flag:
-                        SOCKET_IO.emit('pass_record', {
-                            'node': node.index,
-                            'frequency': node.frequency,
-                            'timestamp': lap_time_stamp + monotonic_to_milliseconds(RACE.start_time_monotonic)
-                        })
+
+                        # emit 'pass_record' message (via thread to make sure we're not blocked), set flag
+                        # to include 'race_start_epoch' only if in cluster and first lap pass
+                        gevent.spawn(emit_pass_record, node, lap_time_stamp, \
+                                     (cluster_flag and not lap_number))
+
                         # Add the new lap to the database
                         RACE.node_laps[node.index].append({
                             'lap_number': lap_number,
@@ -5177,7 +5224,7 @@ def killVRxController(*args):
 #
 
 logger.info('Release: {0} / Server API: {1} / Latest Node API: {2}'.format(RELEASE_VERSION, SERVER_API, NODE_API_BEST))
-logger.debug('Program started at {0:13f}'.format(PROGRAM_START_TIMESTAMP))
+logger.debug('Program started at {0:.1f}'.format(PROGRAM_START_EPOCH_TIME))
 RHUtils.idAndLogSystemInfo()
 
 # log results of module initializations

@@ -32,7 +32,7 @@ Additional options may be configured, for example:
 
 ### Clock Synchronization
 
-It is important that all timers have their clocks synchronized.
+The accuracy of reported split times will be higher if all timers have their clocks synchronized.
 You can use NTP to do this.
 
 On all timers:

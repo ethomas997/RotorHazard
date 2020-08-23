@@ -102,7 +102,8 @@ def early_stage_setup():
             "socketio.client",
             "engineio.client",
             "sqlalchemy",
-            "urllib3"
+            "urllib3",
+            "requests"
             ]:
         logging.getLogger(name).setLevel(logging.WARN)
 
