@@ -1747,6 +1747,15 @@ def on_stage_race():
         emit_priority_message(__('No valid pilots in race'), True, nobroadcast=True)
 
     CLUSTER.emit('stage_race')
+    race_format = getCurrentRaceFormat()
+    
+    # if running as slave timer and missed stop/discard msg then stop/clear current race
+    if RACE.race_status != RaceStatus.READY and race_format is SLAVE_RACE_FORMAT:
+        logger.info("Forcing race clear/restart  because running as slave timer")
+        if RACE.race_status == RaceStatus.RACING:
+            on_stop_race()
+        on_discard_laps()
+    
     if RACE.race_status == RaceStatus.READY: # only initiate staging if ready
         '''Common race start events (do early to prevent processing delay when start is called)'''
         global FULL_RESULTS_CACHE_VALID
@@ -1763,7 +1772,6 @@ def on_stage_race():
         emit_current_leaderboard() # Race page, blank leaderboard to the web client
         emit_race_status()
 
-        race_format = getCurrentRaceFormat()
         if race_format.team_racing_mode:
             check_emit_team_racing_status()  # Show initial team-racing status info
         MIN = min(race_format.start_delay_min, race_format.start_delay_max) # in case values are reversed
@@ -1782,6 +1790,9 @@ def on_stage_race():
             'race_time_sec': race_format.race_time_sec,
             'pi_starts_at_s': RACE.start_time_monotonic
         }) # Announce staging with chosen delay
+
+    else:
+        logger.info("Attempted to stage race while status is not 'ready'")
 
 def autoUpdateCalibration():
     ''' Apply best tuning values to nodes '''
@@ -1972,6 +1983,9 @@ def on_stop_race():
         RACE.race_status = RaceStatus.DONE # To stop registering passed laps, waiting for laps to be cleared
         INTERFACE.set_race_status(RaceStatus.DONE)
         Events.trigger(Evt.RACE_STOP)
+
+        if CLUSTER.hasSlaves():
+            CLUSTER.doClusterRaceStop()
 
     else:
         logger.info('No active race to stop')
@@ -2886,23 +2900,23 @@ def emit_current_laps(**params):
 def get_splits(node, lap_id, lapCompleted):
     splits = []
     for slave_index in range(len(CLUSTER.slaves)):
-        split = Database.LapSplit.query.filter_by(node_index=node,lap_id=lap_id,split_id=slave_index).one_or_none()
-        if split:
-            split_payload = {
-                'split_id': slave_index,
-                'split_raw': split.split_time,
-                'split_time': split.split_time_formatted,
-                'split_speed': '{0:.2f}'.format(split.split_speed) if split.split_speed is not None else '-'
-            }
-        elif lapCompleted:
-            split_payload = {
-                'split_id': slave_index,
-                'split_time': '-'
-            }
-        else:
-            break
-        splits.append(split_payload)
-
+        if CLUSTER.isSlaveAvailable(slave_index):
+            split = Database.LapSplit.query.filter_by(node_index=node,lap_id=lap_id,split_id=slave_index).one_or_none()
+            if split:
+                split_payload = {
+                    'split_id': slave_index,
+                    'split_raw': split.split_time,
+                    'split_time': split.split_time_formatted,
+                    'split_speed': '{0:.2f}'.format(split.split_speed) if split.split_speed is not None else None
+                }
+            elif lapCompleted:
+                split_payload = {
+                    'split_id': slave_index,
+                    'split_time': '-'
+                }
+            else:
+                break
+            splits.append(split_payload)
     return splits
 
 def emit_race_list(**params):
