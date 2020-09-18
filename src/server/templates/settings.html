@@ -1468,6 +1468,21 @@
 			}
 		});
 
+		socket.on('cluster_connect_change', function (msg) {
+			if (msg.connect_flag) {
+				play_beep(150, 225, rotorhazard.indicator_beep_volume, 'square');
+				setTimeout(function(tone){
+					play_beep(200, 250, rotorhazard.indicator_beep_volume, 'square');
+				}, 150, 0);
+			}
+			else {
+				play_beep(200, 200, rotorhazard.indicator_beep_volume, 'square');
+				setTimeout(function(tone){
+					play_beep(400, 100, rotorhazard.indicator_beep_volume, 'square');
+				}, 200, 0);
+			}
+		});
+
 		function calcContrasts(option_index) {
 			var hue = $('html').css('--hue_' + option_index);
 			var sat = $('html').css('--sat_' + option_index);
