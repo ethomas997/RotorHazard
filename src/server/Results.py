@@ -1524,3 +1524,19 @@ def check_win_team_fastest_consecutive(RACE, **kwargs):
     return {
         'status': WinStatus.NONE
     }
+
+def get_leading_pilot_id(results):
+    try:
+        primary_leaderboard = results['meta']['primary_leaderboard']
+        return results[primary_leaderboard][0]['pilot_id']
+    except Exception:
+        logger.exception("Error in Results 'get_leading_pilot_id()'")
+        return Database.PILOT_ID_NONE
+
+def get_leading_team_name(results):
+    try:
+        primary_leaderboard = results['meta']['primary_leaderboard']
+        return results[primary_leaderboard][0]['name']
+    except Exception:
+        logger.exception("Error in Results 'get_leading_team_name()'")
+        return ''

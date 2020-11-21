@@ -3949,7 +3949,7 @@ def emit_race_status_message(**params):
     else:
         SOCKET_IO.emit('race_status_message', emit_payload)
 
-def emit_phonetic_data(pilot_id, lap_id, lap_time, team_name, team_laps, **params):
+def emit_phonetic_data(pilot_id, lap_id, lap_time, team_name, team_laps, leader_flag=False, **params):
     '''Emits phonetic data.'''
     raw_time = lap_time
     phonetic_time = RHUtils.phonetictime_format(lap_time)
@@ -3964,7 +3964,8 @@ def emit_phonetic_data(pilot_id, lap_id, lap_time, team_name, team_laps, **param
         'raw_time': raw_time,
         'phonetic': phonetic_time,
         'team_name' : team_name,
-        'team_laps' : team_laps
+        'team_laps' : team_laps,
+        'leader_flag' : leader_flag
     }
     if ('nobroadcast' in params):
         emit('phonetic_data', emit_payload)
@@ -4414,9 +4415,11 @@ def pass_record_callback(node, lap_timestamp_absolute, source):
                             if RACE.format.team_racing_mode:
                                 team = Database.Pilot.query.get(pilot_id).team
                                 team_data = RACE.team_results['meta']['teams'][team]
-                                emit_phonetic_data(pilot_id, lap_number, lap_time, team, team_data['laps'])
+                                emit_phonetic_data(pilot_id, lap_number, lap_time, team, team_data['laps'], \
+                                                   (team == Results.get_leading_team_name(RACE.team_results)))
                             else:
-                                emit_phonetic_data(pilot_id, lap_number, lap_time, None, None)
+                                emit_phonetic_data(pilot_id, lap_number, lap_time, None, None, \
+                                                   (pilot_id == Results.get_leading_pilot_id(RACE.results)))
 
                             check_win_condition(RACE, INTERFACE) # check for and announce winner
 

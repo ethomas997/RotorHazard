@@ -553,7 +553,10 @@
 				}
 
 				if (ttstext.length > 0) {
-					speak('<div class="speech">' + ttstext + '</div>');
+					ttstext = '<div class="speech">' + ttstext + '</div>'
+					if (msg.leader_flag)
+						ttstext = '_' + ttstext
+					speak(ttstext);
 				}
 			}
 		})
@@ -1569,6 +1572,13 @@
 	});
 
 	function doSpeak(obj) {
+		if (obj.startsWith('_')) {
+			obj = obj.substring(1);
+			play_beep(100, 1200, rotorhazard.indicator_beep_volume, 'square');
+			setTimeout(function(tone){
+				play_beep(150, 1800, rotorhazard.indicator_beep_volume, 'square');
+			}, 100, 0);
+		}
 		$(obj).articulate('setVoice','name', rotorhazard.voice_language).articulate('speak');
 	};
 
