@@ -1574,10 +1574,10 @@
 	function doSpeak(obj) {
 		if (obj.startsWith('_')) {
 			obj = obj.substring(1);
-			play_beep(100, 1200, rotorhazard.indicator_beep_volume, 'square');
+			play_beep(75, 1200, rotorhazard.indicator_beep_volume, 'square');
 			setTimeout(function(tone){
-				play_beep(150, 1800, rotorhazard.indicator_beep_volume, 'square');
-			}, 100, 0);
+				play_beep(100, 1800, rotorhazard.indicator_beep_volume, 'square');
+			}, 75, 0);
 		}
 		$(obj).articulate('setVoice','name', rotorhazard.voice_language).articulate('speak');
 	};
