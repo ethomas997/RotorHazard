@@ -36,6 +36,7 @@
 	}
 
 	$(document).ready(function () {
+		var page_data_loaded_flag = false;
 		// get pi time
 		rotorhazard.pi_time_request = window.performance.now();
 		socket.emit('get_pi_time');
@@ -226,6 +227,7 @@
 		});
 
 		socket.on('frequency_data', function (msg) {
+			page_data_loaded_flag = true;
 			if (msg.fdata.length) {
 				for (var i in msg.fdata) {
 					var fObj = freq.getFObjbyFData(msg.fdata[i]);
@@ -526,6 +528,7 @@
 		});
 
 		socket.on('pilot_data', function (msg) {
+			page_data_loaded_flag = true;
 			msg.pilots.sort(function(a, b){
 				if (a.name < b.name)
 					return -1;
@@ -687,6 +690,7 @@
 		});
 
 		socket.on('race_format', function (msg) {
+			page_data_loaded_flag = true;
 			rotorhazard.race_formats = msg;
 		});
 
@@ -703,6 +707,13 @@
 		$('#use_mp3_tones').change(function (event) {
 			rotorhazard.use_mp3_tones = $(this).prop('checked');
 		});
+
+		setTimeout(function(reload_page) {
+			if (!page_data_loaded_flag) {
+				location.reload();  // if data failed to load from server then do a page refresh
+			}
+		}, 5000);
+
 	});
 
 </script>

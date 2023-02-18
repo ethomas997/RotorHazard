@@ -47,6 +47,7 @@
 	}
 
 	$(document).ready(function () {
+		var page_data_loaded_flag = false;
 		// get pi time
 		rotorhazard.pi_time_request = window.performance.now();
 		socket.emit('get_pi_time');
@@ -372,6 +373,7 @@
 		});
 
 		socket.on('frequency_data', function (msg) {
+			page_data_loaded_flag = true;
 			if (msg.fdata.length) {
 				for (var i in msg.fdata) {
 					var fObj = freq.getFObjbyFData(msg.fdata[i]);
@@ -384,6 +386,7 @@
 		});
 
 		socket.on('heat_data', function (msg) {
+			page_data_loaded_flag = true;
 			rotorhazard.heats = msg.heats;
 			$('#set_current_heat').empty();
 
@@ -1576,6 +1579,7 @@
 		/* Callouts */
 		/* Pilots */
 		socket.on('pilot_data', function (msg) {
+			page_data_loaded_flag = true;
 			rotorhazard.pilot_data = msg.pilots;
 		});
 
@@ -2054,6 +2058,13 @@
 					break;
 			}
 		});
+
+		setTimeout(function(reload_page) {
+			if (!page_data_loaded_flag) {
+				location.reload();  // if data failed to load from server then do a page refresh
+			}
+		}, 3000);
+
 	});
 
 </script>
