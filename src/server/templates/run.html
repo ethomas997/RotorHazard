@@ -786,6 +786,7 @@
 
 		socket.on('leaderboard', function (msg) {
 			var race = msg.current;
+			rotorhazard.event.leaderboard_meta = race.leaderboard.meta;
 
 			heat = rotorhazard.event.heats.find(obj => {return obj.id == race.heat})
 			if (heat) {
@@ -1761,51 +1762,12 @@
 		function get_pilots_list_string(sepstr) {
 			var pilots = '';
 			var first = true;
-			for (i in rotorhazard.current_heatNodes) {
-				pilot = rotorhazard.current_heatNodes[i].pilot_id;
-				if (pilot && rotorhazard.nodes[i].fObj.frequency) {
-					if (!first) {
-						pilots += sepstr;
-					}
-					for (var p in rotorhazard.pilot_data) {
-						pdata = rotorhazard.pilot_data[p];
-						if (pdata.pilot_id == pilot) {
-							if (pdata.phonetic) {
-								pilots += pdata.phonetic;
-							} else {
-								pilots += pdata.callsign;
-							}
-							break;
-						}
-					}
-					first = false;
-				}
-			}
-			return pilots
-		}
-
-		$(document).on('click', '.play_callout', function (event) {
-			var callout = $(this).siblings('.callout_text').val();
-
-			if (callout.indexOf('%') >= 0) {
-				// %HEAT% : Current heat name
-				heat = rotorhazard.event.heats.find(obj => {return obj.id == rotorhazard.current_heat})
-				callout = callout.replace('%HEAT%', heat.displayname);
-
-				// %PILOTS% : Current pilot names
-				callout = callout.replace('%PILOTS%', get_pilots_list_string(' . '))
-
-				// %LINEUP% : Current pilot names (faster)
-				callout = callout.replace('%LINEUP%', get_pilots_list_string(' , '))
-
-				// %FREQS% : Frequencies with current pilot assignments
-				var pilots = '';
-				var first = true;
+			if (rotorhazard.current_heatNodes) {
 				for (i in rotorhazard.current_heatNodes) {
 					pilot = rotorhazard.current_heatNodes[i].pilot_id;
 					if (pilot && rotorhazard.nodes[i].fObj.frequency) {
 						if (!first) {
-							pilots += '. ';
+							pilots += sepstr;
 						}
 						for (var p in rotorhazard.pilot_data) {
 							pdata = rotorhazard.pilot_data[p];
@@ -1818,11 +1780,73 @@
 								break;
 							}
 						}
-						pilots += ': ' + rotorhazard.nodes[i].fObj.key;
 						first = false;
 					}
 				}
-				callout = callout.replace('%FREQS%', pilots)
+			}
+			return pilots
+		}
+
+		$(document).on('click', '.play_callout', function (event) {
+			var callout = $(this).siblings('.callout_text').val();
+
+			if (callout.indexOf('%') >= 0) {
+				// %HEAT% : Current heat name
+				heat = rotorhazard.event.heats.find(obj => {return obj.id == rotorhazard.current_heat})
+				if (heat) {
+					callout = callout.replace('%HEAT%', heat.displayname);
+				}
+
+				// %PILOTS% : Current pilot names
+				callout = callout.replace('%PILOTS%', get_pilots_list_string(' . '));
+
+				// %LINEUP% : Current pilot names (faster)
+				callout = callout.replace('%LINEUP%', get_pilots_list_string(' , '));
+
+				// %FREQS% : Frequencies with current pilot assignments
+				if (callout.indexOf('%FREQS%') >= 0) {
+					var pilots = '';
+					var first = true;
+					for (i in rotorhazard.current_heatNodes) {
+						pilot = rotorhazard.current_heatNodes[i].pilot_id;
+						if (pilot && rotorhazard.nodes[i].fObj.frequency) {
+							if (!first) {
+								pilots += '. ';
+							}
+							for (var p in rotorhazard.pilot_data) {
+								pdata = rotorhazard.pilot_data[p];
+								if (pdata.pilot_id == pilot) {
+									if (pdata.phonetic) {
+										pilots += pdata.phonetic;
+									} else {
+										pilots += pdata.callsign;
+									}
+									break;
+								}
+							}
+							pilots += ': ' + rotorhazard.nodes[i].fObj.key;
+							first = false;
+						}
+					}
+					callout = callout.replace('%FREQS%', pilots);
+				}
+
+				// %FASTESTLAP% : Pilot/time for fastest lap in race
+				// %FASTESTLAPCALL% : Pilot/time for fastest lap in race (with prompt)
+				if (callout.indexOf('%FASTEST') >= 0) {
+					var fastest_str = '';
+					if (rotorhazard.event.leaderboard_meta &&
+								rotorhazard.event.leaderboard_meta.fastest_lap_data &&
+								rotorhazard.event.leaderboard_meta.fastest_lap_data.phonetic) {
+						fastest_str = rotorhazard.event.leaderboard_meta.fastest_lap_data.phonetic[0] +
+									 ', ' + rotorhazard.event.leaderboard_meta.fastest_lap_data.phonetic[1];
+					}
+					callout = callout.replace('%FASTESTLAP%', fastest_str);
+					if (fastest_str.length > 0) {
+						fastest_str = __('Fastest lap') + ' ' + fastest_str;
+					}
+					callout = callout.replace('%FASTESTLAPCALL%', fastest_str);
+				}
 			}
 
 			speak('<div class="speech">' + callout + '</div>');

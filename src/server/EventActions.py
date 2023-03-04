@@ -56,54 +56,55 @@ def initializeEventActions(Events, RHData, RACE, emit_phonetic_text, emit_priori
     try:
         eventActionsObj = EventActions(Events, RHData)
 
+        def getEffectText(action, args, spoken_flag=False):
+            text = action['text']
+            if '%' in text:
+                try:
+                    if 'node_index' in args:
+                        pilot = RHData.get_pilot(RACE.node_pilots[args['node_index']])
+                        pilot_str = pilot.spokenName() if spoken_flag else pilot.callsign
+                        text = text.replace('%PILOT%', pilot_str)
+                    if 'heat_id' in args:
+                        heat = RHData.get_heat(args['heat_id'])
+                    else:
+                        heat = RHData.get_heat(RACE.current_heat)
+                    text = text.replace('%HEAT%', (heat.displayname() if heat else ''))
+                    if '%FASTEST' in text:
+                        fastest_lap_data = RACE.results.get('meta', {}).get('fastest_lap_data')
+                        if fastest_lap_data:
+                            logger.debug("Text effect fastest_lap: {} {}".\
+                                         format(fastest_lap_data['text'][0], fastest_lap_data['text'][1]))
+                            if spoken_flag:
+                                fastest_str = "{}, {}".format(fastest_lap_data['phonetic'][0],  # pilot name
+                                                              fastest_lap_data['phonetic'][1])  # lap time
+                            else:
+                                fastest_str = "{} {}".format(fastest_lap_data['text'][0],  # pilot name
+                                                             fastest_lap_data['text'][1])  # lap time
+                        else:
+                            fastest_str = ""
+                        # %FASTESTLAP% : Pilot/time for fastest lap in race
+                        text = text.replace('%FASTESTLAP%', fastest_str)
+                        # %FASTESTLAPCALL% : Pilot/time for fastest lap in race (with prompt)
+                        if len(fastest_str) > 0:
+                            fastest_str = "{} {}".format(Language.__('Fastest lap'), fastest_str)
+                        text = text.replace('%FASTESTLAPCALL%', fastest_str)
+                except:
+                    logger.exception("Error handling effect text substitution")
+            return text
+
         #register built-in effects
+
         @catchLogExceptionsWrapper
         def speakEffect(action, args):
-            text = action['text']
-            if 'node_index' in args:
-                pilot = RHData.get_pilot(RACE.node_pilots[args['node_index']])
-                text = text.replace('%PILOT%', pilot.spokenName())
-
-            if 'heat_id' in args:
-                heat = RHData.get_heat(args['heat_id'])
-            else:
-                heat = RHData.get_heat(RACE.current_heat)
-
-            text = text.replace('%HEAT%', heat.displayname())
-
-            emit_phonetic_text(text)
+            emit_phonetic_text(getEffectText(action, args, spoken_flag=True))
 
         @catchLogExceptionsWrapper
         def messageEffect(action, args):
-            text = action['text']
-            if 'node_index' in args:
-                pilot = RHData.get_pilot(RACE.node_pilots[args['node_index']])
-                text = text.replace('%PILOT%', pilot.callsign)
-
-            if 'heat_id' in args:
-                heat = RHData.get_heat(args['heat_id'])
-            else:
-                heat = RHData.get_heat(RACE.current_heat)
-
-            text = text.replace('%HEAT%', heat.displayname())
-
-            emit_priority_message(text)
+            emit_priority_message(getEffectText(action, args))
 
         @catchLogExceptionsWrapper
         def alertEffect(action, args):
-            text = action['text']
-            if 'node_index' in args:
-                pilot = RHData.get_pilot(RACE.node_pilots[args['node_index']])
-                text = text.replace('%PILOT%', pilot.callsign)
-
-            if 'heat_id' in args:
-                heat = RHData.get_heat(args['heat_id'])
-            else:
-                heat = RHData.get_heat(RACE.current_heat)
-
-            text = text.replace('%HEAT%', heat.displayname())
-
-            emit_priority_message(text, True)
+            emit_priority_message(getEffectText(action, args), True)
 
         eventActionsObj.registerEffect(
             ActionEffect(
