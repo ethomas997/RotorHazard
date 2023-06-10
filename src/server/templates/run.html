@@ -786,6 +786,7 @@
 
 		socket.on('leaderboard', function (msg) {
 			var race = msg.current;
+			rotorhazard.event.leaderboard_meta = race.leaderboard.meta;
 
 			heat = rotorhazard.event.heats.find(obj => {return obj.id == race.heat})
 			if (heat) {
@@ -1789,6 +1790,23 @@
 					}
 				}
 				callout = callout.replace('%FREQS%', pilots)
+
+				// %FASTEST_RACE_LAP% : Pilot/time for fastest lap in race
+				// %FASTEST_RACE_LAP_CALL% : Pilot/time for fastest lap in race (with prompt)
+				if (callout.indexOf('%FASTEST_RACE_LAP') >= 0) {
+					var fastest_str = '';
+					if (rotorhazard.event.leaderboard_meta &&
+								rotorhazard.event.leaderboard_meta.fastest_race_lap_data &&
+								rotorhazard.event.leaderboard_meta.fastest_race_lap_data.phonetic) {
+						fastest_str = rotorhazard.event.leaderboard_meta.fastest_race_lap_data.phonetic[0] +
+									 ', ' + rotorhazard.event.leaderboard_meta.fastest_race_lap_data.phonetic[1];
+					}
+					callout = callout.replace('%FASTEST_RACE_LAP%', fastest_str);
+					if (fastest_str.length > 0) {
+						fastest_str = __('Fastest lap') + ' ' + fastest_str;
+					}
+					callout = callout.replace('%FASTEST_RACE_LAP_CALL%', fastest_str);
+				}
 			}
 
 			speak('<div class="speech">' + callout + '</div>');

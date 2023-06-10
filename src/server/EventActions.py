@@ -40,6 +40,7 @@ class EventActions:
     def doActions(self, args):
         for action in self.eventActionsList:
             if action['event'] == args['_eventName']:
+                args['results'] = self._racecontext.race.get_results()
                 self.effects[action['effect']].runAction(action, args)
                 self.logger.debug("Calling effect '{}' with {}".format(action, args))
 
