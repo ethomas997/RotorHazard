@@ -373,11 +373,11 @@ class SecondaryNode:
                                     logger.info('Ignoring missing splits before {0} for node {1}'.format(split_id+1, node_index+1))
                                 last_split_ts = last_lap_ts
                             else:
-                                last_split_id = lap_split[-1].id 
+                                last_split_id = lap_split[-1].split_id
                                 if split_id > last_split_id:
                                     if split_id > last_split_id + 1:
                                         logger.info('Ignoring missing splits between {0} and {1} for node {2}'.format(last_split_id+1, split_id+1, node_index+1))
-                                    last_split_ts = lap_split.split_time_stamp
+                                    last_split_ts = lap_split[-1].split_time_stamp
                                 else:
                                     logger.info('Ignoring out-of-order split {0} for node {1}'.format(split_id+1, node_index+1))
                                     last_split_ts = None
@@ -402,14 +402,14 @@ class SecondaryNode:
                                 'node_index': node_index,
                                 'pilot_id': pilot_id,
                                 'lap_id': lap_count,
-                                'splid_id': split_id,
+                                'split_id': split_id,
                                 'split_time_stamp': split_ts,
                                 'split_time': split_time,
                                 'split_time_formatted': split_time_str,
                                 'split_speed': split_speed
                             })
                             
-                            self._racecontext.rhui.emit_split_pass_info(pilot_id, split_id, split_time)
+                            self._racecontext.rhui.emit_split_pass_info(pilot_id, split_id, split_time, split_speed)
 
                     else:  # Action mode
                         pilot = self._racecontext.rhdata.get_pilot(pilot_id)

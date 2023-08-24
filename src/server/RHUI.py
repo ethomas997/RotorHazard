@@ -953,25 +953,28 @@ class RHUI():
         else:
             self._socket.emit('phonetic_text', emit_payload)
 
-    def emit_phonetic_split(self, pilot_id, split_id, split_time, **params):
+    def emit_phonetic_split(self, pilot_id, split_id, split_time, split_speed, **params):
         '''Emits phonetic split-pass data.'''
         pilot = self._racecontext.rhdata.get_pilot(pilot_id)
         phonetic_name = pilot.phonetic or pilot.callsign
-        phonetic_time = RHUtils.phonetictime_format(split_time, self._racecontext.rhdata.get_option('timeFormatPhonetic'))
+        phonetic_time = RHUtils.phonetictime_format(split_time, self._racecontext.rhdata.get_option('timeFormatPhonetic')) \
+                        if not split_speed else None
+        phonetic_speed = "{:.1f}".format(split_speed) if split_speed else None
         emit_payload = {
             'pilot_name': phonetic_name,
             'split_id': str(split_id+1),
-            'split_time': phonetic_time
+            'split_time': phonetic_time,
+            'split_speed': phonetic_speed
         }
         if ('nobroadcast' in params):
             emit('phonetic_split_call', emit_payload)
         else:
             self._socket.emit('phonetic_split_call', emit_payload)
 
-    def emit_split_pass_info(self, pilot_id, split_id, split_time):
+    def emit_split_pass_info(self, pilot_id, split_id, split_time, split_speed):
         self._racecontext.race.clear_results()
         self.emit_current_laps()  # update all laps on the race page
-        self.emit_phonetic_split(pilot_id, split_id, split_time)
+        self.emit_phonetic_split(pilot_id, split_id, split_time, split_speed)
 
     def emit_enter_at_level(self, node, **params):
         '''Emits enter-at level for given node.'''
