@@ -21,6 +21,11 @@ class SecondaryNode:
     MIRROR_MODE = 'mirror'
     ACTION_MODE = 'action'
 
+    TIME_CALLOUT = "time"
+    SPEED_CALLOUT = "speed"
+    BOTH_CALLOUT = "both"
+    NONE_CALLOUT = "none"
+
     LATENCY_AVG_SIZE = 30
     TIMEDIFF_MEDIAN_SIZE = 30
     TIMEDIFF_CORRECTION_THRESH_MS = 250  # correct split times if secondary clock more off than this
@@ -53,6 +58,8 @@ class SecondaryNode:
             self.isActionMode = False
             self.isSplitMode = True
             self.secondaryModeStr = SecondaryNode.SPLIT_MODE
+            if modeStr != SecondaryNode.SPLIT_MODE:
+                logger.warning("Invalid 'mode' value in secondary timer config: {}".format(modeStr))
         self.recEventsFlag = info.get('recEventsFlag', self.isMirrorMode)
         self.queryInterval = info.get('queryInterval', 0)
         if self.queryInterval <= 0:
@@ -60,6 +67,30 @@ class SecondaryNode:
         self.firstQueryInterval = 3 if self.queryInterval >= 3 else 1
         self.queryTimeout = info.get('timeout', 300)
         self.distance = float(info.get('distance', 0.0)) * 1000.0
+        calloutStr = info.get('callout')
+        if calloutStr is not None:
+            calloutStr = calloutStr.lower()
+        if calloutStr == SecondaryNode.TIME_CALLOUT:
+            self.timeCalloutFlag = True
+            self.speedCalloutFlag = False
+        elif calloutStr == SecondaryNode.SPEED_CALLOUT:
+            self.timeCalloutFlag = False
+            self.speedCalloutFlag = True
+        elif calloutStr == SecondaryNode.BOTH_CALLOUT:
+            self.timeCalloutFlag = True
+            self.speedCalloutFlag = True
+        elif calloutStr == SecondaryNode.NONE_CALLOUT:
+            self.timeCalloutFlag = False
+            self.speedCalloutFlag = False
+        else:
+            if self.distance > 0.0:  # if 'distance' specified then default to calling out speed only
+                self.timeCalloutFlag = False
+                self.speedCalloutFlag = True
+            else:
+                self.timeCalloutFlag = True
+                self.speedCalloutFlag = False
+            if calloutStr is not None:
+                logger.warning("Invalid 'callout' value in secondary timer config: {}".format(calloutStr))
         self.startConnectTime = 0
         self.lastContactTime = -1
         self.firstContactTime = 0
@@ -359,7 +390,7 @@ class SecondaryNode:
                         # convert split timestamp (epoch ms sine 1970-01-01) to equivalent local 'monotonic' time value
                         split_ts = data['timestamp'] - self._racecontext.race.start_time_epoch_ms
         
-                        act_laps_list = self._racecontext.race.get_active_laps()[node_index]
+                        act_laps_list = self._racecontext.race.get_active_laps(late_lap_flag=True)[node_index]
                         lap_count = max(0, len(act_laps_list) - 1)
                         split_id = self.id
         
@@ -391,14 +422,14 @@ class SecondaryNode:
                             if self.timeCorrectionMs != 0:
                                 split_ts -= self.timeCorrectionMs
         
-                            split_time = split_ts - last_split_ts
-                            split_speed = self.distance / float(split_time) if self.distance > 0.0 else None
+                            split_time = round(split_ts - last_split_ts, 3)
+                            split_speed = round(self.distance / float(split_time), 2) if self.distance > 0.0 else None
                             split_time_str = RHUtils.time_format(split_time, self._racecontext.rhdata.get_option('timeFormat'))
                             logger.debug('Split pass record: Node {0}, lap {1}, split {2}, time={3}, speed={4}' \
                                 .format(node_index+1, lap_count+1, split_id+1, split_time_str, \
                                 ('{0:.2f}'.format(split_speed) if split_speed is not None else 'None')))
         
-                            self._racecontext.rhdata.add_lapSplit({
+                            split_data = {
                                 'node_index': node_index,
                                 'pilot_id': pilot_id,
                                 'lap_id': lap_count,
@@ -406,10 +437,13 @@ class SecondaryNode:
                                 'split_time_stamp': split_ts,
                                 'split_time': split_time,
                                 'split_time_formatted': split_time_str,
-                                'split_speed': split_speed
-                            })
+                                'split_speed': split_speed,
+                                'time_callout_flag': self.timeCalloutFlag,
+                                'speed_callout_flag': self.speedCalloutFlag
+                            }
                             
-                            self._racecontext.rhui.emit_split_pass_info(pilot_id, split_id, split_time, split_speed)
+                            self._racecontext.rhdata.add_lapSplit(split_data)
+                            self._racecontext.rhui.emit_split_pass_info(split_data)
 
                     else:  # Action mode
                         pilot = self._racecontext.rhdata.get_pilot(pilot_id)
