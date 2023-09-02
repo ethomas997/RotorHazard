@@ -482,20 +482,21 @@
 				if ((rotorhazard.voice_split_timer & SPLMSK_PILOT_NAME) && msg.pilot_name) {
 					ttstext = msg.pilot_name;
 				}
+				var sepstr = ' ';
 				if (((rotorhazard.voice_split_timer & SPLMSK_SPLIT_ID) && msg.split_id) ||
 							((rotorhazard.voice_split_timer & SPLMSK_SPLIT_TIME) && msg.split_time)) {
 					ttstext += ' ' + __l('split');
-					var sepstr = ' ';
 					if ((rotorhazard.voice_split_timer & SPLMSK_SPLIT_ID) && msg.split_id) {
 						ttstext += ' ' + msg.split_id;
 						sepstr = ', ';
 					}
 					if ((rotorhazard.voice_split_timer & SPLMSK_SPLIT_TIME) && msg.split_time) {
 						ttstext += sepstr + msg.split_time;
+						sepstr = ', ';
 					}
 				}
 				if ((rotorhazard.voice_split_timer & SPLMSK_SPLIT_TIME) && msg.split_speed) {
-					ttstext += ' ' + __l('speed') + ' ' + msg.split_speed;
+					ttstext += sepstr + __l('speed') + ' ' + msg.split_speed;
 				}
 				speak('<div class="speech">' + ttstext + '</div>');
 			}
