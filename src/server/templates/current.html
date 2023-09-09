@@ -486,7 +486,7 @@
 				var sepstr = ' ';
 				if (((rotorhazard.voice_split_timer & SPLMSK_SPLIT_ID) && msg.split_id) ||
 							((rotorhazard.voice_split_timer & SPLMSK_SPLIT_TIME) && msg.split_time)) {
-					ttstext += ' ' + __l('split');
+					ttstext += ' ' + __l('split time');
 					if ((rotorhazard.voice_split_timer & SPLMSK_SPLIT_ID) && msg.split_id) {
 						ttstext += ' ' + msg.split_id;
 						sepstr = ', ';
@@ -733,7 +733,7 @@
 	<div class="panel-header">
 		<h2>{{ __('Next Race') }}</h2>
 	</div>
-	<div class="panel-content">
+	<div class="panel-content full-width">
 		<h3 class="current-heat">{{ __('Loading...') }}</h3>
 		<div class="race-results">
 			{% for node in nodes %}
@@ -747,7 +747,7 @@
 </div>
 
 <div class="panel" id="recent">
-	<div class="panel-content">
+	<div class="panel-content full-width">
 		<div class="timer">
 			<div class="timing-clock"><div class="warning" title="{{ __('Browser Sync Loss') }}">&#9888;&#xFE0E;</div><div class="time-display">--:--</div></div>
 		</div>

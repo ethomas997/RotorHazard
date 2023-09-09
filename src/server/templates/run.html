@@ -948,7 +948,7 @@
 				var sepstr = ' ';
 				if (((rotorhazard.voice_split_timer & SPLMSK_SPLIT_ID) && msg.split_id) ||
 							((rotorhazard.voice_split_timer & SPLMSK_SPLIT_TIME) && msg.split_time)) {
-					ttstext += ' ' + __l('split');
+					ttstext += ' ' + __l('split time');
 					if ((rotorhazard.voice_split_timer & SPLMSK_SPLIT_ID) && msg.split_id) {
 						ttstext += ' ' + msg.split_id;
 						sepstr = ', ';
