@@ -84,7 +84,7 @@ class RHRace():
 
             self._racecontext.events.trigger(Evt.RACE_SCHEDULE, {
                 'scheduled_at': self.scheduled_time,
-                'heat': self.current_heat,
+                'heat_id': self.current_heat,
                 })
 
             self._racecontext.rhui.emit_priority_message(self.__("Next race begins in {0:01d}:{1:02d}".format(int(m), int(s))), True)
@@ -93,7 +93,7 @@ class RHRace():
         else:
             self.scheduled = False
             self._racecontext.events.trigger(Evt.RACE_SCHEDULE_CANCEL, {
-                'heat': self.current_heat,
+                'heat_id': self.current_heat,
                 })
             self._racecontext.rhui.emit_priority_message(self.__("Scheduled race cancelled"), False)
 
