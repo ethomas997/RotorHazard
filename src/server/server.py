@@ -1709,6 +1709,16 @@ def on_kill_server(*args):
     gevent.sleep(0.5)
     gevent.spawn(SOCKET_IO.stop)  # shut down flask http server
 
+@SOCKET_IO.on('set_log_level')
+@catchLogExceptionsWrapper
+def on_set_log_level(data):
+    '''Set minimum log level shown on Server Log page.'''
+    log_lvl_num = log.get_logging_level_value(data.get('log_level_str'))
+    if log_lvl_num < 0:
+        log_lvl_num = logging.NOTSET
+    log.set_socket_min_log_level(log_lvl_num)
+    log.emit_current_log_file_to_socket(Current_log_path_name, SOCKET_IO)
+
 @SOCKET_IO.on('download_logs')
 @catchLogExceptionsWrapper
 def on_download_logs(data):

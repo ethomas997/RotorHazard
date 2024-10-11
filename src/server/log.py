@@ -291,6 +291,7 @@ def close_logging():
         print("Error closing logging: " + str(ex))
 
 def set_socket_min_log_level(lvl_num):
+    global socket_min_log_level
     socket_min_log_level = lvl_num
     if queued_handler2_obj:
         queued_handler2_obj.setLevel(socket_min_log_level)
@@ -312,6 +313,7 @@ def emit_current_log_file_to_socket(log_path_name, SOCKET_IO):
             if socket_min_log_level <= logging.NOTSET:
                 with io.open(log_path_name, 'r') as f:
                     SOCKET_IO.emit("hardware_log_init", f.read())
+                SOCKET_IO.emit("log_level_init", ''.join(logging.getLevelName(logging.NOTSET)))
             else:
                 line_list = []
                 with io.open(log_path_name, 'r') as f:
@@ -324,6 +326,7 @@ def emit_current_log_file_to_socket(log_path_name, SOCKET_IO):
                                 if lvl_num >= socket_min_log_level:
                                     line_list.append(line_str)
                 SOCKET_IO.emit("hardware_log_init", ''.join(line_list))
+                SOCKET_IO.emit("log_level_init", ''.join(logging.getLevelName(socket_min_log_level)))
         except Exception:
             logging.getLogger(__name__).exception("Error sending current log file to socket")
     start_socket_forward_handler()

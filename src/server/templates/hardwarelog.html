@@ -47,8 +47,19 @@
 			set_log_text(msg);
 		});
 
-		socket.on('hardware_log', function (msg) {
-			append_to_log(msg);
+		socket.on('hardware_log_init', function (msg) {
+			set_log_text(msg);
+		});
+
+		socket.on('log_level_init', function (msg) {
+			$('#set_log_level').val(msg);
+		});
+
+		$('#set_log_level').change(function (event) {
+			var data = {
+				log_level_str: $(this).val()
+			};
+			socket.emit('set_log_level', data);
 		});
 
 		$(document).on('click', '#pause-updates', function(){
@@ -96,9 +107,18 @@
 <div id="log"></div>
 </pre>
 <div class="control-set">
+	<b><label for="set_log_level">{{ __('Log Level') }}:</label></b>
+	<select id="set_log_level">
+		<option value="NOTSET">{{ __('All') }}</option>
+		<option value="INFO">{{ __('Info') }}</option>
+		<option value="WARNING">{{ __('Warning') }}</option>
+		<option value="ERROR">{{ __('Error') }}</option>
+	</select>
+	&nbsp; &nbsp; &nbsp;
 	<button id="pause-updates">{{ __('Pause Updates') }}</button>
 	<button id="select-log">{{ __('Select Text') }}</button>
 	<button id="download_logs">{{ __('Download Logs') }}</button>
+	&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
 </div>
 </main>
 {% endblock %}
