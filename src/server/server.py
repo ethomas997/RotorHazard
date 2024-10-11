@@ -822,7 +822,7 @@ def on_load_data(data):
         elif load_type == 'cluster_status':
             RaceContext.rhui.emit_cluster_status()
         elif load_type == 'hardware_log_init':
-            emit_current_log_file_to_socket()
+            log.emit_current_log_file_to_socket(Current_log_path_name, SOCKET_IO)
         else:
             logger.warning('Called undefined load type: {}'.format(load_type))
 
@@ -2645,15 +2645,6 @@ def assign_frequencies():
             })
 
         logger.info('Frequency set: Node {0} B:{1} Ch:{2} Freq:{3}'.format(idx+1, freqs["b"][idx], freqs["c"][idx], freqs["f"][idx]))
-
-def emit_current_log_file_to_socket():
-    if Current_log_path_name:
-        try:
-            with io.open(Current_log_path_name, 'r') as f:
-                SOCKET_IO.emit("hardware_log_init", f.read())
-        except Exception:
-            logger.exception("Error sending current log file to socket")
-    log.start_socket_forward_handler()
 
 def db_init(nofill=False):
     '''Initialize database.'''
