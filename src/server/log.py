@@ -47,6 +47,20 @@ queued_handler_obj = None   # for log file
 queued_handler2_obj = None  # for socket output
 socket_min_log_level = logging.NOTSET  # minimum log level for sockout output (NOTSET = show all)
 
+# Counters to track number of messages logged for each log level
+class LogMsgLevelCounters:
+    def __init__(self):
+        self.level_counters_dict = {}
+
+    def inc_count(self, lvl_name):
+        prev_count = self.level_counters_dict.get(lvl_name, 0)
+        self.level_counters_dict[lvl_name] = prev_count + 1
+
+    def get_count(self, lvl_name):
+        return self.level_counters_dict.get(lvl_name, 0)
+
+msg_level_counters_obj = LogMsgLevelCounters()
+
 # Log handler that distributes log records to one or more destination handlers via a gevent queue.
 class QueuedLogEventHandler(logging.Handler):
 
@@ -57,20 +71,30 @@ class QueuedLogEventHandler(logging.Handler):
         self.log_record_queue = gevent.queue.Queue(maxsize=99)
         if dest_hndlr:
             self.queue_handlers_list.append(dest_hndlr)
+        self.log_level_callback_lvl_num = logger.NOTSET
+        self.log_level_callback_obj = None
         gevent.spawn(self.queueWorkerFn)
 
     # Adds given destination log handler.
     def addHandler(self, dest_hndlr):
         self.queue_handlers_list.append(dest_hndlr)
 
+    # Sets callback invoked when message with given log level is logged
+    def setLogLevelCallback(self, lvl_num, callback_obj=None):
+        self.log_level_callback_lvl_num = lvl_num
+        self.log_level_callback_obj = callback_obj
+
     def queueWorkerFn(self):
         while True:
             try:
                 log_rec = self.log_record_queue.get()  # block until log record put into queue
+                msg_level_counters_obj.inc_count(log_rec.levelname)
                 for dest_hndlr in self.queue_handlers_list:
                     if log_rec.levelno >= dest_hndlr.level:
                         gevent.sleep(0.001)
                         dest_hndlr.emit(log_rec)
+                if self.log_level_callback_lvl_num > logger.NOTSET and callable(self.log_level_callback_obj):
+                    self.log_level_callback_obj(log_rec)
             except KeyboardInterrupt:
                 print("Log-event queue worker thread terminated by keyboard interrupt")
                 raise
@@ -131,18 +155,18 @@ def early_stage_setup():
 
     # some 3rd party packages use logging. Good for them. Now be quiet.
     for name in [
-            "geventwebsocket.handler",
-            "socketio.server",
-            "engineio.server",
-            "socketio.client",
-            "engineio.client",
-            "sqlalchemy",
-            "urllib3",
-            "requests",
-            "PIL",
-            "Adafruit_I2C",
-            "Adafruit_I2C.Device.Bus"
-            ]:
+        "geventwebsocket.handler",
+        "socketio.server",
+        "engineio.server",
+        "socketio.client",
+        "engineio.client",
+        "sqlalchemy",
+        "urllib3",
+        "requests",
+        "PIL",
+        "Adafruit_I2C",
+        "Adafruit_I2C.Device.Bus"
+    ]:
         logging.getLogger(name).setLevel(logging.WARN)
 
 def get_logging_level_value(lvl_name):
@@ -204,8 +228,8 @@ def later_stage_setup(config, socket):
     (lvl, err_str) = get_logging_level_for_item(logging_config, SYSLOG_LEVEL_STR, err_str, logging.NOTSET)
     if lvl > 0 and lvl < LEVEL_NONE_VALUE:
         system_logger = logging.handlers.SysLogHandler("/dev/log") \
-                        if platform.system() != "Windows" else \
-                        logging.handlers.NTEventLogHandler("RotorHazard")
+            if platform.system() != "Windows" else \
+            logging.handlers.NTEventLogHandler("RotorHazard")
         system_logger.setLevel(lvl)
         system_logger.setFormatter(logging.Formatter(SYSLOG_FORMAT_STR))
         handlers.append(system_logger)
