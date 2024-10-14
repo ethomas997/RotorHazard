@@ -47,10 +47,6 @@
 			set_log_text(msg);
 		});
 
-		socket.on('hardware_log_init', function (msg) {
-			set_log_text(msg);
-		});
-
 		socket.on('log_level_init', function (msg) {
 			$('#set_log_level').val(msg);
 		});

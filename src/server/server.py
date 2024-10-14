@@ -192,6 +192,15 @@ SOCKET_IO = SocketIO(APP, async_mode='gevent', cors_allowed_origins=RaceContext.
 # thus set up logging for good.
 Current_log_path_name = log.later_stage_setup(RaceContext.serverconfig.get_section('LOGGING'), SOCKET_IO)
 
+# Callback function invoked when an error-level message is logged
+def log_error_callback_fn(*args):
+    set_ui_message("errors-logged",\
+                   __("Error messages have been logged, <a href=\"/hardwarelog\">click here</a> to view them"),\
+                   header="Notice", subclass="errors-logged")
+    log.set_log_level_callback(logging.NOTSET)
+
+log.set_log_level_callback(logging.ERROR, log_error_callback_fn)
+
 RaceContext.sensors = Sensors()
 RaceContext.cluster = None
 RaceContext.rhdata = RHData.RHData(Events, RaceContext, SERVER_API, DB_FILE_NAME, DB_BKP_DIR_NAME) # Primary race data storage
@@ -3015,6 +3024,7 @@ def check_requirements():
                 header='Warning', subclass='none')
     except:
         logger.exception("Error checking package requirements")
+    
 
 class plugin_class():
     def __init__(self, name):
@@ -3481,6 +3491,8 @@ def rh_program_initialize():
 
         # make event actions available to cluster/secondary timers
         RaceContext.cluster.setEventActionsObj(EventActionsObj)
+        
+        logger.error("DEBUG test error")
 
 RHAPI.race._frequencyset_set = on_set_profile # TODO: Refactor management functions
 RHAPI.race._raceformat_set = on_set_race_format # TODO: Refactor management functions

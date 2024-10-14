@@ -71,7 +71,7 @@ class QueuedLogEventHandler(logging.Handler):
         self.log_record_queue = gevent.queue.Queue(maxsize=99)
         if dest_hndlr:
             self.queue_handlers_list.append(dest_hndlr)
-        self.log_level_callback_lvl_num = logger.NOTSET
+        self.log_level_callback_lvl_num = logging.NOTSET
         self.log_level_callback_obj = None
         gevent.spawn(self.queueWorkerFn)
 
@@ -80,7 +80,7 @@ class QueuedLogEventHandler(logging.Handler):
         self.queue_handlers_list.append(dest_hndlr)
 
     # Sets callback invoked when message with given log level is logged
-    def setLogLevelCallback(self, lvl_num, callback_obj=None):
+    def setLogLevelCallback(self, lvl_num, callback_obj):
         self.log_level_callback_lvl_num = lvl_num
         self.log_level_callback_obj = callback_obj
 
@@ -93,7 +93,7 @@ class QueuedLogEventHandler(logging.Handler):
                     if log_rec.levelno >= dest_hndlr.level:
                         gevent.sleep(0.001)
                         dest_hndlr.emit(log_rec)
-                if self.log_level_callback_lvl_num > logger.NOTSET and callable(self.log_level_callback_obj):
+                if self.log_level_callback_lvl_num > logging.NOTSET and callable(self.log_level_callback_obj):
                     self.log_level_callback_obj(log_rec)
             except KeyboardInterrupt:
                 print("Log-event queue worker thread terminated by keyboard interrupt")
@@ -292,6 +292,11 @@ def later_stage_setup(config, socket):
         logging.debug("Deleted {0} old log file(s)".format(num_old_del))
 
     return log_path_name
+
+# Sets callback invoked when message with given log level is logged
+def set_log_level_callback(lvl_num, callback_obj=None):
+    if queued_handler_obj:
+        queued_handler_obj.setLogLevelCallback(lvl_num, callback_obj)
 
 def wait_for_queue_empty():
     if queued_handler_obj:
