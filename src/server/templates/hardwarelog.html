@@ -92,6 +92,12 @@
 			// construct blob from byte array and initiate browser save-as
 			saveAs(new Blob([byteArray], {type: "application/octet-stream"}), msg.file_name);
 		});
+
+		// if URL parameter (like "?log_level_init=ERROR") was present then filter by log level
+		levelStr = getUrlParameter('log_level_init');
+		if (levelStr) {
+			$('#set_log_level').val(msg);
+		}
 	});
 
 </script>

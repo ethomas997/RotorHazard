@@ -355,7 +355,7 @@ def emit_current_log_file_to_socket(log_path_name, SOCKET_IO):
                                 if lvl_num >= socket_min_log_level:
                                     line_list.append(line_str)
                 SOCKET_IO.emit("hardware_log_init", ''.join(line_list))
-                SOCKET_IO.emit("log_level_init", ''.join(logging.getLevelName(socket_min_log_level)))
+                SOCKET_IO.emit("log_level_init", logging.getLevelName(socket_min_log_level))
         except Exception:
             logging.getLogger(__name__).exception("Error sending current log file to socket")
     start_socket_forward_handler()
