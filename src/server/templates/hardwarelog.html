@@ -6,7 +6,7 @@
 		'hardware_log_init'
 	];
 
-	var log;
+	var log_content_str;
 	var live_updates = true;
 
 	function selectText(element) {
@@ -29,22 +29,25 @@
 
 	$(document).ready(function () {
 		function set_log_text(text) {
-			log = text;
-			$('#log').html($('<div/>').text(log).html());
+			log_content_str = text;
+			$('#log-panel').html($('<div/>').text(log_content_str).html());
 			window.scrollTo(0,document.body.scrollHeight);
 		}
 
 		function append_to_log(text) {
-			log = log + text + "\n";
-
+			log_content_str = log_content_str + text + "\n";
 			if (live_updates) {
-				$('#log').text(log);
+				$('#log-panel').text(log_content_str);
 				window.scrollTo(0,document.body.scrollHeight);
 			}
 		}
 
 		socket.on('hardware_log_init', function (msg) {
 			set_log_text(msg);
+		});
+
+		socket.on('hardware_log', function (msg) {
+			append_to_log(msg);
 		});
 
 		socket.on('log_level_init', function (msg) {
@@ -62,14 +65,14 @@
 			live_updates = !live_updates
 			if (live_updates) {
 				$('#pause-updates').html(__('Pause Updates'));
-				set_log_text(log);
+				set_log_text(log_content_str);
 			} else {
 				$('#pause-updates').html(__('Resume Updates'));
 			}
 		});
 
 		$(document).on('click', '#select-log', function(){
-			selectText('log');
+			selectText('log-panel');
 		});
 
 		$('button#download_logs').click(function (event) {
@@ -96,7 +99,11 @@
 		// if URL parameter (like "?log_level_init=ERROR") was present then filter by log level
 		levelStr = getUrlParameter('log_level_init');
 		if (levelStr) {
-			$('#set_log_level').val(msg);
+			$('#set_log_level').val(levelStr);
+			socket.emit('set_log_level', {log_level_str: levelStr});
+		} else {  // if no parameter then set log level to 'ALL' and always do emit to
+			      //  workaround issue where page doesn't load if new tab on same browser
+			socket.emit('set_log_level', {log_level_str: "ALL"});
 		}
 	});
 
@@ -106,7 +113,7 @@
 <!--Status messages from the timing system-->
 <h2>{{ __('Server Log') }}</h2>
 <pre>
-<div id="log"></div>
+<div id="log-panel">{{ __('Loading...') }}</div>
 </pre>
 <div class="control-set">
 	<b><label for="set_log_level">{{ __('Log Level') }}:</label></b>

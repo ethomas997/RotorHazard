@@ -46,6 +46,7 @@ socket_handler_obj = None
 queued_handler_obj = None   # for log file
 queued_handler2_obj = None  # for socket output
 socket_min_log_level = logging.NOTSET  # minimum log level for sockout output (NOTSET = show all)
+log_error_alerted_flag = False
 
 # Counters to track number of messages logged for each log level
 class LogMsgLevelCounters:
@@ -93,7 +94,9 @@ class QueuedLogEventHandler(logging.Handler):
                     if log_rec.levelno >= dest_hndlr.level:
                         gevent.sleep(0.001)
                         dest_hndlr.emit(log_rec)
-                if self.log_level_callback_lvl_num > logging.NOTSET and callable(self.log_level_callback_obj):
+                if self.log_level_callback_lvl_num > logging.NOTSET and \
+                                    log_rec.levelno >= self.log_level_callback_lvl_num and \
+                                    callable(self.log_level_callback_obj):
                     self.log_level_callback_obj(log_rec)
             except KeyboardInterrupt:
                 print("Log-event queue worker thread terminated by keyboard interrupt")
@@ -298,6 +301,16 @@ def set_log_level_callback(lvl_num, callback_obj=None):
     if queued_handler_obj:
         queued_handler_obj.setLogLevelCallback(lvl_num, callback_obj)
 
+# Returns True if an alert indicating that error messages have been logged should be shown
+def get_log_error_alert_flag():
+    global log_error_alerted_flag
+    if log_error_alerted_flag or (not queued_handler_obj):
+        return False
+    if msg_level_counters_obj.get_count(logging.getLevelName(logging.ERROR)) > 0:
+        log_error_alerted_flag = True  # set flag so alert is only shown once
+        return True
+    return False
+
 def wait_for_queue_empty():
     if queued_handler_obj:
         queued_handler_obj.waitForQueueEmpty()
@@ -342,7 +355,7 @@ def emit_current_log_file_to_socket(log_path_name, SOCKET_IO):
             if socket_min_log_level <= logging.NOTSET:
                 with io.open(log_path_name, 'r') as f:
                     SOCKET_IO.emit("hardware_log_init", f.read())
-                SOCKET_IO.emit("log_level_init", ''.join(logging.getLevelName(logging.NOTSET)))
+                SOCKET_IO.emit("log_level_init", logging.getLevelName(logging.NOTSET))
             else:
                 line_list = []
                 with io.open(log_path_name, 'r') as f:
