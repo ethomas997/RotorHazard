@@ -60,6 +60,9 @@ class LogMsgLevelCounters:
     def get_count(self, lvl_name):
         return self.level_counters_dict.get(lvl_name, 0)
 
+    def get_items(self):
+        return self.level_counters_dict.items()
+
 msg_level_counters_obj = LogMsgLevelCounters()
 
 # Log handler that distributes log records to one or more destination handlers via a gevent queue.
@@ -311,6 +314,14 @@ def get_log_error_alert_flag():
         return True
     return False
 
+# Returns a string showing the number of messages for each log level
+def get_log_level_counts_str():
+    str_list = []
+    for name,count in sorted(msg_level_counters_obj.get_items(), key=get_logging_level_value):
+        str_list.append("{}={}".format(name, count))
+    str_list.reverse()
+    return ", ".join(str_list)
+
 def wait_for_queue_empty():
     if queued_handler_obj:
         queued_handler_obj.waitForQueueEmpty()
@@ -355,9 +366,9 @@ def emit_current_log_file_to_socket(log_path_name, SOCKET_IO):
             if socket_min_log_level <= logging.NOTSET:
                 with io.open(log_path_name, 'r') as f:
                     SOCKET_IO.emit("hardware_log_init", f.read())
-                SOCKET_IO.emit("log_level_init", logging.getLevelName(logging.NOTSET))
+                SOCKET_IO.emit("log_level_sel_init", logging.getLevelName(logging.NOTSET))
             else:
-                line_list = []
+                line_list = []  # filter lines so only log levels >= 'socket_min_log_level' are included
                 with io.open(log_path_name, 'r') as f:
                     for line_str in f:
                         pos1 = line_str.index('[', 24)
@@ -368,7 +379,7 @@ def emit_current_log_file_to_socket(log_path_name, SOCKET_IO):
                                 if lvl_num >= socket_min_log_level:
                                     line_list.append(line_str)
                 SOCKET_IO.emit("hardware_log_init", ''.join(line_list))
-                SOCKET_IO.emit("log_level_init", logging.getLevelName(socket_min_log_level))
+                SOCKET_IO.emit("log_level_sel_init", logging.getLevelName(socket_min_log_level))
         except Exception:
             logging.getLogger(__name__).exception("Error sending current log file to socket")
     start_socket_forward_handler()

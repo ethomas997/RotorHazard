@@ -197,7 +197,7 @@ Current_log_path_name = log.later_stage_setup(RaceContext.serverconfig.get_secti
 def log_error_callback_fn(*args):
     if not is_ui_message_set("errors-logged"):
         set_ui_message("errors-logged",\
-                   __("Error messages have been logged, <a href=\"/hardwarelog?log_level_init=ERROR\">click here</a> to view them"),\
+                   __("Error messages have been logged, <a href=\"/hardwarelog?log_level=ERROR\">click here</a> to view them"),\
                    header="Notice", subclass="errors-logged")
         if Auth_succeeded_flag:
             SOCKET_IO.emit('update_server_messages', get_ui_server_messages_str())
@@ -313,7 +313,7 @@ def getFwfileProctypeStr(fileStr):
 def check_log_error_alert():
     if Auth_succeeded_flag and log.get_log_error_alert_flag():
         gevent.spawn_later(1.0, RaceContext.rhui.emit_priority_message,\
-                __("Error messages have been logged, <a href=\"/hardwarelog?log_level_init=ERROR\">click here</a> to view them"),\
+                __("Error messages have been logged, <a href=\"/hardwarelog?log_level=ERROR\">click here</a> to view them"),\
                 True, False, True)  # admin_only=True
         return True
     return False
@@ -1754,7 +1754,10 @@ def on_set_log_level(data):
         log_lvl_num = logging.NOTSET
     log.set_socket_min_log_level(log_lvl_num)
     # use spawned thread to allow initial log-page load to happen first
-    gevent.spawn_later(0.05, log.emit_current_log_file_to_socket, Current_log_path_name, SOCKET_IO)
+    if not data.get('refresh_page_flag'):
+        gevent.spawn_later(0.05, log.emit_current_log_file_to_socket, Current_log_path_name, SOCKET_IO)
+    else:  # if flag then do page refresh (to remove keyboard focus from selector widget)
+        gevent.spawn_later(0.05, SOCKET_IO.emit, 'do_log_page_refresh')
 
 @SOCKET_IO.on('download_logs')
 @catchLogExceptionsWrapper
@@ -3172,6 +3175,7 @@ def start(port_val=RaceContext.serverconfig.get_item('GENERAL', 'HTTP_PORT'), ar
     rep_str = RaceContext.interface.get_intf_error_report_str(True)
     if rep_str:
         logger.log((logging.INFO if RaceContext.interface.get_intf_total_error_count() else logging.DEBUG), rep_str)
+    logger.info("Logged message counts:  " + log.get_log_level_counts_str())
     stop_background_threads()
     log.wait_for_queue_empty()
     gevent.sleep(2)  # allow system shutdown command to run before program exit
@@ -3519,11 +3523,6 @@ def rh_program_initialize():
 
         # make event actions available to cluster/secondary timers
         RaceContext.cluster.setEventActionsObj(EventActionsObj)
-        
-        #logger.error("DEBUG test error0")
-        gevent.spawn_later(30, logger.error, "DEBUG test error1")
-        gevent.spawn_later(90, logger.error, "DEBUG test error2")
-        gevent.spawn_later(120, logger.error, "DEBUG test error3")
 
 RHAPI.race._frequencyset_set = on_set_profile # TODO: Refactor management functions
 RHAPI.race._raceformat_set = on_set_race_format # TODO: Refactor management functions

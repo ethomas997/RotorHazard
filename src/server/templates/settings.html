@@ -155,7 +155,6 @@
 		});
 
 		socket.on('update_server_messages', function (str) {
-			console.log('DEBUG server messages: ' + str);
 			$('#server_messages').html(str);
 		});
 

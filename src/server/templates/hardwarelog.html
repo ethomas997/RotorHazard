@@ -50,13 +50,18 @@
 			append_to_log(msg);
 		});
 
-		socket.on('log_level_init', function (msg) {
+		socket.on('log_level_sel_init', function (msg) {
 			$('#set_log_level').val(msg);
+		});
+
+		socket.on('do_log_page_refresh', function () {
+			window.location.replace('/hardwarelog?log_level=' + $('#set_log_level').val());
 		});
 
 		$('#set_log_level').change(function (event) {
 			var data = {
-				log_level_str: $(this).val()
+				log_level_str: $(this).val(),
+				refresh_page_flag: true  // do page refresh to remove keyboard focus from selector widget
 			};
 			socket.emit('set_log_level', data);
 		});
@@ -96,15 +101,15 @@
 			saveAs(new Blob([byteArray], {type: "application/octet-stream"}), msg.file_name);
 		});
 
-		// if URL parameter (like "?log_level_init=ERROR") was present then filter by log level
-		levelStr = getUrlParameter('log_level_init');
+		// if URL parameter (like "?log_level=ERROR") was present then filter by log level
+		levelStr = getUrlParameter('log_level');
 		if (levelStr) {
 			$('#set_log_level').val(levelStr);
-			socket.emit('set_log_level', {log_level_str: levelStr});
-		} else {  // if no parameter then set log level to 'ALL' and always do emit to
-			      //  workaround issue where page doesn't load if new tab on same browser
-			socket.emit('set_log_level', {log_level_str: "ALL"});
+		} else {
+			levelStr = $('#set_log_level').val();
 		}
+		// always do emit to workaround issue where page doesn't load if new tab on same browser
+		socket.emit('set_log_level', {log_level_str: levelStr});
 	});
 
 </script>
