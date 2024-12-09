@@ -802,7 +802,7 @@ class RHRace():
 
                                 if self.win_status == WinStatus.DECLARED and \
                                     race_format.unlimited_time == 1 and \
-                                    self.format.team_racing_mode and \
+                                    self.format.team_racing_mode == RacingMode.TEAM_ENABLED and \
                                     self.format.win_condition == WinCondition.FIRST_TO_LAP_X:
                                     lap_late_flag = True  # "late" lap pass after team race winner declared (when no time limit)
                                     if pilot_obj:
@@ -877,7 +877,7 @@ class RHRace():
                                     # announce pilot lap number unless winner declared and pilot has finished final lap
                                     lap_id = lap_number if self.win_status != WinStatus.DECLARED or \
                                                            (not node_finished_flag) else None
-                                    if race_format.team_racing_mode:
+                                    if race_format.team_racing_mode == RacingMode.TEAM_ENABLED:
                                         team_name = pilot_obj.team if pilot_obj else ""
                                         team_laps = self.team_results['meta']['teams'][team_name]['laps']
                                         if not lap_late_flag:
@@ -1272,7 +1272,7 @@ class RHRace():
 
             if self.win_status != WinStatus.NONE and logger.getEffectiveLevel() <= logging.DEBUG:
                 logger.debug("Pilot lap counts: " + Results.get_pilot_lap_counts_str(self.results))
-                if race_format.team_racing_mode:
+                if race_format.team_racing_mode == RacingMode.TEAM_ENABLED:
                     logger.debug("Team lap totals: " + Results.get_team_lap_totals_str(self.team_results))
 
             # if racer lap was deleted and result is winner un-declared
@@ -1290,7 +1290,7 @@ class RHRace():
             if win_status_dict['status'] == WinStatus.DECLARED:
                 # announce winner
                 win_data = win_status_dict['data']
-                if race_format.team_racing_mode:
+                if race_format.team_racing_mode == RacingMode.TEAM_ENABLED:
                     win_str = win_data.get('name', '')
                     team_win_str = self._racecontext.language.__('Team') + ' ' + win_str
                     self.race_winner_name = team_win_str
@@ -1861,6 +1861,11 @@ class WinCondition():
     FASTEST_CONSECUTIVE = 4
     MOST_LAPS = 5 # lap count only
     MOST_LAPS_OVERTIME = 6 # lap count only, laps and time after T=0
+
+class RacingMode():
+    INDIVIDUAL = 0
+    TEAM_ENABLED = 1
+    COOP_ENABLED = 2
 
 class WinStatus():
     NONE = 0

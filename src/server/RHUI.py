@@ -16,6 +16,7 @@ import gevent
 import RHUtils
 from RHUtils import catchLogExceptionsWrapper
 from Database import ProgramMethod, RoundType
+from RHRace import RacingMode
 from filtermanager import Flt
 import logging
 logger = logging.getLogger(__name__)
@@ -823,7 +824,7 @@ class RHUI():
 
         emit_payload['current']['leaderboard'] = self._racecontext.race.get_results()
 
-        if self._racecontext.race.format.team_racing_mode:
+        if self._racecontext.race.format.team_racing_mode == RacingMode.TEAM_ENABLED:
             emit_payload['current']['team_leaderboard'] = self._racecontext.race.get_team_results()
 
         # cache
@@ -844,7 +845,7 @@ class RHUI():
 
             emit_payload['last_race']['leaderboard'] = self._racecontext.last_race.get_results()
 
-            if self._racecontext.last_race.format.team_racing_mode:
+            if self._racecontext.last_race.format.team_racing_mode == RacingMode.TEAM_ENABLED:
                 emit_payload['last_race']['team_leaderboard'] = self._racecontext.last_race.get_team_results()
 
         if ('nobroadcast' in params):
@@ -875,6 +876,8 @@ class RHUI():
             current_heat['status'] = heat.status
             current_heat['auto_frequency'] = heat.auto_frequency
             current_heat['active'] = heat.active
+            current_heat['coop_best_time'] = heat.coop_best_time
+            current_heat['coop_num_laps'] = heat.coop_num_laps
             current_heat['next_round'] = self._racecontext.rhdata.get_max_round(heat.id)
 
             current_heat['slots'] = []
@@ -991,7 +994,7 @@ class RHUI():
             raceformat['start_delay_max'] = race_format.start_delay_max_ms
             raceformat['number_laps_win'] = race_format.number_laps_win
             raceformat['win_condition'] = race_format.win_condition
-            raceformat['team_racing_mode'] = 1 if race_format.team_racing_mode else 0
+            raceformat['team_racing_mode'] = int(race_format.team_racing_mode) if race_format.team_racing_mode else RacingMode.INDIVIDUAL
             raceformat['start_behavior'] = race_format.start_behavior
             raceformat['locked'] = self._racecontext.rhdata.savedRaceMetas_has_raceFormat(race_format.id)
             formats.append(raceformat)
