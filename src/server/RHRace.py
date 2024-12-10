@@ -886,16 +886,31 @@ class RHRace():
                                         # if winning team has been declared then don't announce team lap number
                                         if self.win_status == WinStatus.DECLARED:
                                             team_laps = None
-                                        self._racecontext.rhui.emit_phonetic_data(pilot_id, lap_id, lap_time, team_name, team_laps, \
+                                            team_phonetic = None
+                                        else:
+                                            team_phonetic = self.__("Team") + " " + team_name + ", " + self.__("Lap") + \
+                                                            " " + str(team_laps)
+                                        self._racecontext.rhui.emit_phonetic_data(pilot_id, lap_id, lap_time, team_phonetic, \
                                                         (check_leader and \
                                                          team_name == Results.get_leading_team_name(self.team_results)), \
                                                         node_finished_flag, node.index)
+                                    elif race_format.team_racing_mode == RacingMode.COOP_ENABLED:
+                                        coop_laps = self.team_results['leaderboard']['laps']
+                                        if not lap_late_flag:
+                                            logger.debug('Lap pass: Node={}, lap={}, pilot={} -> Co-op lap {}' \
+                                                         .format(node.index+1, lap_number, pilot_namestr, coop_laps))
+                                        # if win has been declared then don't announce coop lap number
+                                        if self.win_status == WinStatus.DECLARED:
+                                            team_phonetic = None
+                                        else:
+                                            team_phonetic =  self.__("Coe awp") + " " +  self.__("Lap") + " " + str(coop_laps)
+                                        self._racecontext.rhui.emit_phonetic_data(pilot_id, lap_id, lap_time, team_phonetic)
                                     else:
                                         if check_leader:
                                             leader_pilot_id = Results.get_leading_pilot_id(self, self._racecontext.interface, True)
                                         else:
                                             leader_pilot_id = RHUtils.PILOT_ID_NONE
-                                        self._racecontext.rhui.emit_phonetic_data(pilot_id, lap_id, lap_time, None, None, \
+                                        self._racecontext.rhui.emit_phonetic_data(pilot_id, lap_id, lap_time, None, \
                                                         (pilot_id == leader_pilot_id), node_finished_flag, node.index)
                                         if leader_pilot_id != RHUtils.PILOT_ID_NONE:
                                             # if new leading pilot was not called out above (different pilot) then call out now
@@ -1071,12 +1086,13 @@ class RHRace():
             self.check_win_condition(deletedLap=True)  # handle possible change in win status
 
             # handle possible change in race leader
-            leader_pilot_id = Results.get_leading_pilot_id(self, self._racecontext.interface, True)
-            if leader_pilot_id != RHUtils.PILOT_ID_NONE:
-                self._racecontext.rhui.emit_phonetic_leader(leader_pilot_id)
-                leader_pilot_obj = self._racecontext.rhdata.get_pilot(leader_pilot_id)
-                if leader_pilot_obj:
-                    logger.info('Pilot {} is leading (after deleted lap)'.format(leader_pilot_obj.callsign))
+            if race_format.team_racing_mode == RacingMode.INDIVIDUAL:
+                leader_pilot_id = Results.get_leading_pilot_id(self, self._racecontext.interface, True)
+                if leader_pilot_id != RHUtils.PILOT_ID_NONE:
+                    self._racecontext.rhui.emit_phonetic_leader(leader_pilot_id)
+                    leader_pilot_obj = self._racecontext.rhdata.get_pilot(leader_pilot_id)
+                    if leader_pilot_obj:
+                        logger.info('Pilot {} is leading (after deleted lap)'.format(leader_pilot_obj.callsign))
 
             self._racecontext.rhui.emit_current_laps() # Race page, update web client
             self._racecontext.rhui.emit_current_leaderboard() # Race page, update web client
@@ -1122,12 +1138,13 @@ class RHRace():
             self.check_win_condition(deletedLap=True)  # handle possible change in win status
 
             # handle possible change in race leader
-            leader_pilot_id = Results.get_leading_pilot_id(self, self._racecontext.interface, True)
-            if leader_pilot_id != RHUtils.PILOT_ID_NONE:
-                self._racecontext.rhui.emit_phonetic_leader(leader_pilot_id)
-                leader_pilot_obj = self._racecontext.rhdata.get_pilot(leader_pilot_id)
-                if leader_pilot_obj:
-                    logger.info('Pilot {} is leading (after deleted lap)'.format(leader_pilot_obj.callsign))
+            if self.format and self.format.team_racing_mode == RacingMode.INDIVIDUAL:
+                leader_pilot_id = Results.get_leading_pilot_id(self, self._racecontext.interface, True)
+                if leader_pilot_id != RHUtils.PILOT_ID_NONE:
+                    self._racecontext.rhui.emit_phonetic_leader(leader_pilot_id)
+                    leader_pilot_obj = self._racecontext.rhdata.get_pilot(leader_pilot_id)
+                    if leader_pilot_obj:
+                        logger.info('Pilot {} is leading (after deleted lap)'.format(leader_pilot_obj.callsign))
 
             self._racecontext.rhui.emit_current_laps() # Race page, update web client
             self._racecontext.rhui.emit_current_leaderboard() # Race page, update web client
@@ -1289,6 +1306,7 @@ class RHRace():
 
             if win_status_dict['status'] == WinStatus.DECLARED:
                 # announce winner
+                status_msg_str = log_msg_str = phonetic_str = None
                 win_data = win_status_dict['data']
                 if race_format.team_racing_mode == RacingMode.TEAM_ENABLED:
                     win_str = win_data.get('name', '')
@@ -1298,6 +1316,38 @@ class RHRace():
                     status_msg_str = self._racecontext.language.__('Winner is') + ' ' + team_win_str
                     log_msg_str = "Race status msg:  Winner is Team " + win_str
                     phonetic_str = status_msg_str
+
+                elif race_format.team_racing_mode == RacingMode.COOP_ENABLED:
+#                    self.SOCKET_IO.emit('stop_timer')
+                    coop_leaderboard = self.team_results.get('leaderboard')
+                    coop_time = coop_leaderboard.get('coop_total_time') if coop_leaderboard else None
+                    if coop_time:
+                        phonetic_time = RHUtils.phonetictime_format( \
+                                            coop_leaderboard.get('coop_total_time_raw', ''), \
+                                            self._racecontext.rhdata.get_option('timeFormatPhonetic'))
+                        status_msg_str = self.__('Race done') + ', ' + self.__('co-op time is') + ' ' + coop_time
+                        log_msg_str = "Race status msg:  Race done, co-op time is " + coop_time
+                        phonetic_str = self.__('Race done') + ', ' + self.__('coe awp time is') + ' ' + phonetic_time
+
+                        heat_data = self._racecontext.rhdata.get_heat(self.current_heat)
+                        note_str = ' ' + json.dumps({"coop_info": {"best_time": coop_time}})
+                        if heat_data:
+#                             if heat_data.note and len(heat_data.note) > 0:
+#                                 heat_data.note += note_str
+#                             else:
+#                                 heat_data.note = note_str
+#                             logger.debug("Setting heat data note: " + heat_data.note)
+                            logger.debug("Setting heat data note: " + note_str)
+
+
+#                     if race_format.win_condition == WinCondition.FIRST_TO_LAP_X:
+#                         pass
+#                     win_str = win_data.get('name', '')
+#                     status_msg_str = __('Winner is') + ' ' + __('Team') + ' ' + win_str
+#                     log_msg_str = "Race status msg:  Winner is Team " + win_str
+#                     phonetic_str = status_msg_str
+
+
                 else:
                     win_str = win_data.get('callsign', '')
                     self.race_winner_name = win_str
@@ -1318,11 +1368,12 @@ class RHRace():
                     phonetic_str = self._racecontext.language.__('Winner is') + ' ' + win_phon_name
 
                 # if racer lap was deleted then only output if win-status details changed
-                if (not del_lap_flag) or self.win_status != previous_win_status or \
-                                            status_msg_str != self.status_message:
+                if status_msg_str and ((not del_lap_flag) or self.win_status != previous_win_status or \
+                                            status_msg_str != self.status_message):
                     self.status_message = status_msg_str
                     logger.info(log_msg_str)
-                    self._racecontext.rhui.emit_phonetic_text(phonetic_str, 'race_winner', True)
+                    self._racecontext.rhui.emit_phonetic_text(phonetic_str, 'race_winner', \
+                                           (race_format.team_racing_mode != RacingMode.COOP_ENABLED))
                     self._racecontext.events.trigger(Evt.RACE_WIN, {
                         'win_status': win_status_dict,
                         'message': self.status_message,
