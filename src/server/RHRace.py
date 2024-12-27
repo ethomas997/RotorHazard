@@ -64,6 +64,10 @@ class RHRace():
         self.start_time_formatted = ''
         self.start_time_monotonic = 0
         self.start_time_epoch_ms = 0 # ms since 1970-01-01
+        self.unlimited_time = True
+        self.race_time_sec = 0
+        self.coop_best_time = 0.0  # best time achieved in co-op racing mode (seconds)
+        self.coop_num_laps = 0     # best # of laps in co-op racing mode
         self.node_laps = {} # current race lap objects, by node
         self.node_has_finished = {}     # True if pilot for node has finished race
         self.node_finished_effect = {}  # True if effect for pilot-finished for node has been triggered
@@ -242,6 +246,14 @@ class RHRace():
                 self.status_message = ''
                 self.any_races_started = True
 
+                self.unlimited_time = race_format.unlimited_time
+                self.race_time_sec = race_format.race_time_sec
+                if heat_data and race_format and race_format.team_racing_mode == RacingMode.COOP_ENABLED:
+                    self._racecontext.rhdata.get_heat_coop_values(heat_data, self)
+                    if race_format.win_condition == WinCondition.FIRST_TO_LAP_X and self.coop_best_time > 0.001:
+                        self.unlimited_time = False
+                        self.race_time_sec = round(self.coop_best_time, 1)
+
                 self.init_node_finished_flags(heatNodes)
 
                 self._racecontext.interface.set_race_status(RaceStatus.STAGING)
@@ -291,8 +303,8 @@ class RHRace():
                     'staging_tones': staging_tones,
                     'pi_starts_at_s': self.start_time_monotonic,
                     'server_start_epoch_ms': self.start_time_epoch_ms,
-                    'unlimited_time': race_format.unlimited_time,
-                    'race_time_sec': race_format.race_time_sec,
+                    'unlimited_time': self.unlimited_time,
+                    'race_time_sec': self.race_time_sec,
                     'color': ColorVal.ORANGE,
                     'heat_id': self.current_heat,
                     'race_node_colors': self.seat_colors,
@@ -625,6 +637,9 @@ class RHRace():
 
             logger.info('Current laps saved: Heat {0} Round {1}'.format(self.current_heat, max_round+1))
 
+            if self.format.team_racing_mode == RacingMode.COOP_ENABLED:
+                self._racecontext.rhdata.update_heat_coop_values(heat, self.coop_best_time, self.coop_num_laps)
+
             result = self.get_results()
             if heat_result:
                 self._racecontext.rhdata.set_results_heat(heat, token,
@@ -800,18 +815,22 @@ class RHRace():
                                                .format(node.index+1, lap_number, lap_time_fmtstr, lap_ts_fmtstr, \
                                                        self._racecontext.interface.get_lap_source_str(source), pilot_namestr))
 
-                                if self.win_status == WinStatus.DECLARED and \
-                                    race_format.unlimited_time == 1 and \
-                                    self.format.team_racing_mode == RacingMode.TEAM_ENABLED and \
-                                    self.format.win_condition == WinCondition.FIRST_TO_LAP_X:
-                                    lap_late_flag = True  # "late" lap pass after team race winner declared (when no time limit)
-                                    if pilot_obj:
-                                        t_str = ", Team " + pilot_obj.team
-                                    else:
-                                        t_str = ""
-                                    logger.info('Ignoring lap after race winner declared: Node={}, lap={}, lapTime={}, sinceStart={}, source={}, pilot: {}{}' \
-                                               .format(node.index+1, lap_number, lap_time_fmtstr, lap_ts_fmtstr, \
-                                                       self._racecontext.interface.get_lap_source_str(source), pilot_namestr, t_str))
+                                if self.win_status == WinStatus.DECLARED and race_format.unlimited_time == 1 and \
+                                                            self.format.win_condition == WinCondition.FIRST_TO_LAP_X:
+                                    if self.format.team_racing_mode == RacingMode.TEAM_ENABLED:
+                                        lap_late_flag = True  # "late" lap pass after team race winner declared (when no time limit)
+                                        if pilot_obj:
+                                            t_str = ", Team " + pilot_obj.team
+                                        else:
+                                            t_str = ""
+                                        logger.info('Ignoring lap after race winner declared: Node={}, lap={}, lapTime={}, sinceStart={}, source={}, pilot: {}{}' \
+                                                   .format(node.index+1, lap_number, lap_time_fmtstr, lap_ts_fmtstr, \
+                                                           self._racecontext.interface.get_lap_source_str(source), pilot_namestr, t_str))
+                                    elif self.format.team_racing_mode == RacingMode.COOP_ENABLED:
+                                        lap_late_flag = True  # "late" lap pass after co-op race done (when no time limit)
+                                        logger.info('Ignoring lap after co-op race done: Node={}, lap={}, lapTime={}, sinceStart={}, source={}, pilot: {}' \
+                                                   .format(node.index+1, lap_number, lap_time_fmtstr, lap_ts_fmtstr, \
+                                                           self._racecontext.interface.get_lap_source_str(source), pilot_namestr))
 
                                 if logger.getEffectiveLevel() <= logging.DEBUG:  # if DEBUG msgs actually being logged
                                     late_str = " (late lap)" if lap_late_flag else ""
@@ -885,8 +904,7 @@ class RHRace():
                                                   .format(node.index+1, lap_number, pilot_namestr, team_name, team_laps))
                                         # if winning team has been declared then don't announce team lap number
                                         if self.win_status == WinStatus.DECLARED:
-                                            team_laps = None
-                                            team_phonetic = None
+                                            team_phonetic = ' '
                                         else:
                                             team_phonetic = self.__("Team") + " " + team_name + ", " + self.__("Lap") + \
                                                             " " + str(team_laps)
@@ -895,16 +913,17 @@ class RHRace():
                                                          team_name == Results.get_leading_team_name(self.team_results)), \
                                                         node_finished_flag, node.index)
                                     elif race_format.team_racing_mode == RacingMode.COOP_ENABLED:
-                                        coop_laps = self.team_results['leaderboard']['laps']
+                                        coop_laps = self.team_results['by_race_time'][0]['laps']
                                         if not lap_late_flag:
                                             logger.debug('Lap pass: Node={}, lap={}, pilot={} -> Co-op lap {}' \
                                                          .format(node.index+1, lap_number, pilot_namestr, coop_laps))
                                         # if win has been declared then don't announce coop lap number
                                         if self.win_status == WinStatus.DECLARED:
-                                            team_phonetic = None
+                                            team_phonetic = ' '
                                         else:
-                                            team_phonetic =  self.__("Coe awp") + " " +  self.__("Lap") + " " + str(coop_laps)
-                                        self._racecontext.rhui.emit_phonetic_data(pilot_id, lap_id, lap_time, team_phonetic)
+                                            team_phonetic =  self.__("Co-op") + " " +  self.__("Lap") + " " + str(coop_laps)
+                                        self._racecontext.rhui.emit_phonetic_data(pilot_id, lap_id, lap_time, \
+                                                                                  team_phonetic, False, node_finished_flag, node.index)
                                     else:
                                         if check_leader:
                                             leader_pilot_id = Results.get_leading_pilot_id(self, self._racecontext.interface, True)
@@ -1308,6 +1327,7 @@ class RHRace():
                 # announce winner
                 status_msg_str = log_msg_str = phonetic_str = None
                 win_data = win_status_dict['data']
+                winner_flag = True
                 if race_format.team_racing_mode == RacingMode.TEAM_ENABLED:
                     win_str = win_data.get('name', '')
                     team_win_str = self._racecontext.language.__('Team') + ' ' + win_str
@@ -1318,35 +1338,55 @@ class RHRace():
                     phonetic_str = status_msg_str
 
                 elif race_format.team_racing_mode == RacingMode.COOP_ENABLED:
-#                    self.SOCKET_IO.emit('stop_timer')
-                    coop_leaderboard = self.team_results.get('leaderboard')
-                    coop_time = coop_leaderboard.get('coop_total_time') if coop_leaderboard else None
+                    coop_leaderboard = self.team_results.get('by_race_time')
+                    if type(coop_leaderboard) is list and len(coop_leaderboard) > 0:
+                        coop_leaderboard = coop_leaderboard[0]
+                    coop_time = coop_leaderboard.get('coop_total_time') if type(coop_leaderboard) is dict else None
                     if coop_time:
-                        phonetic_time = RHUtils.phonetictime_format( \
-                                            coop_leaderboard.get('coop_total_time_raw', ''), \
+                        total_time_ms = coop_leaderboard.get('coop_total_time_raw', 0)
+                        coop_time_secs = round(float(total_time_ms)/1000, 3)  # save time in seconds, rounded to nearest ms
+                        phonetic_time = RHUtils.format_phonetic_time_to_str(total_time_ms, \
                                             self._racecontext.rhdata.get_option('timeFormatPhonetic'))
-                        status_msg_str = self.__('Race done') + ', ' + self.__('co-op time is') + ' ' + coop_time
-                        log_msg_str = "Race status msg:  Race done, co-op time is " + coop_time
-                        phonetic_str = self.__('Race done') + ', ' + self.__('coe awp time is') + ' ' + phonetic_time
-
-                        heat_data = self._racecontext.rhdata.get_heat(self.current_heat)
-                        note_str = ' ' + json.dumps({"coop_info": {"best_time": coop_time}})
-                        if heat_data:
-#                             if heat_data.note and len(heat_data.note) > 0:
-#                                 heat_data.note += note_str
-#                             else:
-#                                 heat_data.note = note_str
-#                             logger.debug("Setting heat data note: " + heat_data.note)
-                            logger.debug("Setting heat data note: " + note_str)
-
-
-#                     if race_format.win_condition == WinCondition.FIRST_TO_LAP_X:
-#                         pass
-#                     win_str = win_data.get('name', '')
-#                     status_msg_str = __('Winner is') + ' ' + __('Team') + ' ' + win_str
-#                     log_msg_str = "Race status msg:  Winner is Team " + win_str
-#                     phonetic_str = status_msg_str
-
+                        new_best_str = ""
+                        diff_str = ""
+                        phonetic_diff_str = ""
+                        if self.unlimited_time:  # if first race to establish target time
+                            log_msg_str = "Race status msg:  Race done, co-op time is " + coop_time
+                            self.coop_best_time = coop_time_secs
+                            winner_flag = False  # don't play winner tone when announcing
+                        else:
+                            self._racecontext.rhui.emit_race_stop()
+                            time_format = self._racecontext.serverconfig.get_item('UI', 'timeFormat')
+                            prev_coop_time_ms = int(self.coop_best_time*1000 + 0.5)
+                            prev_coop_time_str = RHUtils.format_time_to_str(prev_coop_time_ms, time_format)
+                            if coop_time_secs >= self.coop_best_time:  # co-op time was not better than target time
+                                diff_ms = int(coop_time_secs*1000+0.5) - prev_coop_time_ms
+                                diff_str = RHUtils.format_split_time_to_str(diff_ms, time_format)
+                                log_msg_str = "Race status msg:  Race done, co-op time is " + coop_time + ", prev co-op time was " + \
+                                              prev_coop_time_str + " (" + diff_str + " behind)"
+                                diff_str += " " + self.__("behind") + ")"
+                                phonetic_diff_str = " " + self.__("behind")
+                                winner_flag = False  # don't play winner tone when announcing
+                            else:  # new best co-op time established
+                                diff_ms = prev_coop_time_ms - int(coop_time_secs*1000+0.5)
+                                diff_str = RHUtils.format_split_time_to_str(diff_ms, time_format)
+                                log_msg_str = "Race status msg:  Race done, new best co-op time is " + coop_time + ", prev co-op time was " + \
+                                              prev_coop_time_str + " (" + diff_str + " ahead)"
+                                new_best_str = self.__('success! New best') + ' '
+                                diff_str += " " + self.__("ahead") + ")"
+                                phonetic_diff_str = " " + self.__("ahead")
+                                self.coop_best_time = coop_time_secs
+                            diff_str = ", " + self.__("previous co-op time was ") + prev_coop_time_str + ", (" + diff_str
+                            phonetic_diff_str = ", " + self.__("previous co-op time was ") + \
+                                                RHUtils.format_phonetic_time_to_str(prev_coop_time_ms, \
+                                                    self._racecontext.serverconfig.get_item('UI', 'timeFormatPhonetic')) + ", " + \
+                                                RHUtils.format_phonetic_time_to_str(diff_ms, \
+                                                    self._racecontext.serverconfig.get_item('UI', 'timeFormatPhonetic')) + \
+                                                phonetic_diff_str
+                        status_msg_str = self.__("Race done") + ", " + new_best_str + self.__("co-op time is") + \
+                                         " " + coop_time + diff_str
+                        phonetic_str = self.__("Race done") + ", " + new_best_str + self.__("co-op time is") + \
+                                       " " + phonetic_time + phonetic_diff_str
 
                 else:
                     win_str = win_data.get('callsign', '')
@@ -1372,8 +1412,7 @@ class RHRace():
                                             status_msg_str != self.status_message):
                     self.status_message = status_msg_str
                     logger.info(log_msg_str)
-                    self._racecontext.rhui.emit_phonetic_text(phonetic_str, 'race_winner', \
-                                           (race_format.team_racing_mode != RacingMode.COOP_ENABLED))
+                    self._racecontext.rhui.emit_phonetic_text(phonetic_str, 'race_winner', winner_flag)
                     self._racecontext.events.trigger(Evt.RACE_WIN, {
                         'win_status': win_status_dict,
                         'message': self.status_message,
@@ -1549,11 +1588,27 @@ class RHRace():
             logger.error('Race cache has invalid status')
             token = monotonic()
             self.clear_team_results(token)
-
         # cache rebuild
         logger.debug('Building current race results')
         build = Results.calc_team_leaderboard(self._racecontext)
         self.set_team_results(token, build)
+        return build
+
+    def get_coop_results(self):
+        if 'data_ver' in self.team_cacheStatus and 'build_ver' in self.team_cacheStatus:
+            token = self.team_cacheStatus['data_ver']
+            if self.team_cacheStatus['data_ver'] == self.team_cacheStatus['build_ver']:
+                # cache hit
+                return self.team_results
+            # else: cache miss
+        else:
+            logger.error('Race cache has invalid status')
+            token = monotonic()
+            self.clear_team_results(token)
+        # cache rebuild
+        logger.debug('Building current race results')
+        build = Results.calc_coop_leaderboard(self._racecontext)
+        self.set_coop_results(token, build)
         return build
 
     def set_lap_results(self, token, lap_results):
@@ -1572,6 +1627,13 @@ class RHRace():
 
     def set_team_results(self, token, results):
         results = self._filters.run_filters(Flt.RACE_TEAM_RESULTS, results)
+        if self.team_cacheStatus['data_ver'] == token:
+            self.team_cacheStatus['build_ver'] = token
+            self.team_results = results
+        return True
+
+    def set_coop_results(self, token, results):
+        results = self._filters.run_filters(Flt.RACE_COOP_RESULTS, results)
         if self.team_cacheStatus['data_ver'] == token:
             self.team_cacheStatus['build_ver'] = token
             self.team_results = results
