@@ -1764,6 +1764,21 @@ class RHData():
                 return False
         return True
 
+    # Fetches co-op race values stored via heat in database and loads them into the given RHRace object
+    def get_heat_coop_values(self, heat_or_id, rh_race_obj):
+        heat_obj = self.resolve_heat_from_heat_or_id(heat_or_id)
+        if heat_obj and rh_race_obj:
+            rh_race_obj.coop_best_time = heat_obj.coop_best_time
+            rh_race_obj.coop_num_laps = heat_obj.coop_num_laps
+
+    # Update co-op race values stored via heat in database (if modified)
+    def update_heat_coop_values(self, heat_or_id, coop_best_time, coop_num_laps):
+        heat_obj = self.resolve_heat_from_heat_or_id(heat_or_id)
+        if heat_obj and (coop_best_time != heat_obj.coop_best_time or coop_num_laps != heat_obj.coop_num_laps):
+            heat_obj.coop_best_time = coop_best_time
+            heat_obj.coop_num_laps = coop_num_laps
+            self.commit()
+
     # Race Classes
     def resolve_raceClass_from_raceClass_or_id(self, raceClass_or_id):
         if isinstance(raceClass_or_id, Database.RaceClass):
@@ -2853,9 +2868,10 @@ class RHData():
             'format_name': self.__("Co-op Fastest Time to 7 Laps"),
             'unlimited_time': 1,
             'race_time_sec': 0,
-            'start_delay_min': 3,
-            'start_delay_max': 3,
-            'staging_tones': 2,
+            "staging_fixed_tones": 3,
+            'start_delay_min_ms': 1000,
+            'start_delay_max_ms': 0,
+            'staging_delay_tones': 2,
             'number_laps_win': 7,
             'win_condition': WinCondition.FIRST_TO_LAP_X,
             'team_racing_mode': RacingMode.COOP_ENABLED,
@@ -2866,9 +2882,10 @@ class RHData():
             'format_name': self.__("Co-op Most Laps in Race Time"),
             'unlimited_time': 0,
             'race_time_sec': 150,
-            'start_delay_min': 3,
-            'start_delay_max': 3,
-            'staging_tones': 1,
+            "staging_fixed_tones": 3,
+            'start_delay_min_ms': 1000,
+            'start_delay_max_ms': 0,
+            'staging_delay_tones': 2,
             'number_laps_win': 0,
             'win_condition': WinCondition.MOST_LAPS,
             'team_racing_mode': RacingMode.COOP_ENABLED,
@@ -2879,9 +2896,10 @@ class RHData():
             'format_name': self.__("Co-op Most Laps - Finish Laps"),
             'unlimited_time': 0,
             'race_time_sec': 150,
-            'start_delay_min': 3,
-            'start_delay_max': 3,
-            'staging_tones': 1,
+            "staging_fixed_tones": 3,
+            'start_delay_min_ms': 1000,
+            'start_delay_max_ms': 0,
+            'staging_delay_tones': 2,
             'number_laps_win': 0,
             'win_condition': WinCondition.MOST_LAPS_OVERTIME,
             'team_racing_mode': RacingMode.COOP_ENABLED,

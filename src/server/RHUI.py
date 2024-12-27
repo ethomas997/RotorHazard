@@ -491,8 +491,8 @@ class RHUI():
                 'race_format_id': self._racecontext.race.format.id if hasattr(self._racecontext.race.format, 'id') else None,
                 'race_heat_id': heat_id,
                 'race_class_id': class_id,
-                'unlimited_time': race_format.unlimited_time,
-                'race_time_sec': race_format.race_time_sec,
+                'unlimited_time': self._racecontext.race.unlimited_time,
+                'race_time_sec': self._racecontext.race.race_time_sec,
                 'staging_tones': 0,
                 'hide_stage_timer': race_format.start_delay_min_ms != race_format.start_delay_max_ms,
                 'pi_starts_at_s': self._racecontext.race.start_time_monotonic,
@@ -826,6 +826,8 @@ class RHUI():
 
         if self._racecontext.race.format.team_racing_mode == RacingMode.TEAM_ENABLED:
             emit_payload['current']['team_leaderboard'] = self._racecontext.race.get_team_results()
+        elif self._racecontext.race.format.team_racing_mode == RacingMode.COOP_ENABLED:
+            emit_payload['current']['team_leaderboard'] = self._racecontext.race.get_coop_results()
 
         # cache
         if self._racecontext.last_race:
@@ -847,6 +849,8 @@ class RHUI():
 
             if self._racecontext.last_race.format.team_racing_mode == RacingMode.TEAM_ENABLED:
                 emit_payload['last_race']['team_leaderboard'] = self._racecontext.last_race.get_team_results()
+            elif self._racecontext.last_race.format.team_racing_mode == RacingMode.COOP_ENABLED:
+                emit_payload['last_race']['team_leaderboard'] = self._racecontext.last_race.get_coop_results()
 
         if ('nobroadcast' in params):
             emit('leaderboard', emit_payload)
