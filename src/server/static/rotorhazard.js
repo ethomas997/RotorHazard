@@ -1906,13 +1906,18 @@ function build_team_leaderboard(leaderboard, display_type, meta) {
 		meta.team_racing_mode = RACING_MODE_TEAM;
 		meta.consecutives_count = 0;
 	}
+	var coop_flag = (leaderboard.length == 1 && leaderboard[0].name == "Group")
 
 	var twrap = $('<div class="responsive-wrap">');
 	var table = $('<table class="leaderboard">');
 	var header = $('<thead>');
 	var header_row = $('<tr>');
-	header_row.append('<th class="pos"><span class="screen-reader-text">' + __('Rank') + '</span></th>');
-	header_row.append('<th class="team">' + __('Team') + '</th>');
+	if (coop_flag) {
+		header_row.append('<th class="team">' + __('Co-op') + '</th>');
+	} else {
+		header_row.append('<th class="pos"><span class="screen-reader-text">' + __('Rank') + '</span></th>');
+		header_row.append('<th class="team">' + __('Team') + '</th>');
+	}
 	header_row.append('<th class="contribution">' + __('Contributors') + '</th>');
 	if (display_type == 'by_race_time') {
 		header_row.append('<th class="laps">' + __('Laps') + '</th>');
@@ -1931,7 +1936,9 @@ function build_team_leaderboard(leaderboard, display_type, meta) {
 
 	for (var i in leaderboard) {
 		var row = $('<tr>');
-		row.append('<td class="pos">'+ (leaderboard[i].position != null ? leaderboard[i].position : '-') +'</td>');
+		if (!coop_flag) {
+			row.append('<td class="pos">'+ (leaderboard[i].position != null ? leaderboard[i].position : '-') +'</td>');
+		}
 		row.append('<td class="team">'+ leaderboard[i].name +'</td>');
 		row.append('<td class="contribution">'+ leaderboard[i].contributing + '/' + leaderboard[i].members + '</td>');
 		if (display_type == 'by_race_time') {
