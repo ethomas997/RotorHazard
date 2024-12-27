@@ -1050,8 +1050,10 @@ def calc_team_leaderboard(racecontext):
         return leaderboard_output
     return None
 
-def calc_coop_leaderboard(raceObj, rhDataObj):
+def calc_coop_leaderboard(racecontext):
     '''Calculates and returns co-op-racing info.'''
+    raceObj = racecontext.race
+    time_format = racecontext.serverconfig.get_item('UI', 'timeFormat')
     # Uses current results cache / requires calc_leaderboard to have been run prior
     race_format = raceObj.format
 
@@ -1111,7 +1113,8 @@ def calc_coop_leaderboard(raceObj, rhDataObj):
             if coopGroup['combined_consecutives_raw']:
                 average_consecutives_raw = float(coopGroup['combined_consecutives_raw']) / coopGroup['contributing']
 
-        leaderboard = {
+        leaderboard = [{
+            'name': "Group",
             'contributing': coopGroup['contributing'],
             'members': coopGroup['members'],
             'contribution_amt': contribution_amt,
@@ -1122,14 +1125,14 @@ def calc_coop_leaderboard(raceObj, rhDataObj):
             'average_lap_raw': average_lap_raw,
             'average_fastest_lap_raw': average_fastest_lap_raw,
             'average_consecutives_raw': average_consecutives_raw,
-            'total_time': RHUtils.time_format(coopGroup['total_time_raw'], rhDataObj.get_option('timeFormat')),
-            'average_lap': RHUtils.time_format(average_lap_raw, rhDataObj.get_option('timeFormat')),
-            'average_fastest_lap': RHUtils.time_format(average_fastest_lap_raw, rhDataObj.get_option('timeFormat')),
-            'average_consecutives': RHUtils.time_format(average_consecutives_raw, rhDataObj.get_option('timeFormat')),
-        }
+            'total_time': RHUtils.format_time_to_str(coopGroup['total_time_raw'], time_format),
+            'average_lap': RHUtils.format_time_to_str(average_lap_raw, time_format),
+            'average_fastest_lap': RHUtils.format_time_to_str(average_fastest_lap_raw, time_format),
+            'average_consecutives': RHUtils.format_time_to_str(average_consecutives_raw, time_format),
+        }]
 
         leaderboard_output = {
-            'leaderboard': leaderboard
+            'by_race_time': leaderboard
         }
 
         if race_format:
@@ -1352,7 +1355,7 @@ def check_win_condition_result(racecontext, **kwargs):
                 return check_win_team_laps_and_overtime(racecontext, **kwargs)
         elif race_format.team_racing_mode == RacingMode.COOP_ENABLED:
             if race_format.win_condition == WinCondition.FIRST_TO_LAP_X:
-                return check_win_coop_first_to_x(raceObj, rhDataObj, **kwargs)
+                return check_win_coop_first_to_x(racecontext, **kwargs)
 #             elif race_format.win_condition == WinCondition.MOST_LAPS:
 #                 return check_win_coop_most_laps(raceObj, rhDataObj, interfaceObj, **kwargs)
 #             elif race_format.win_condition == WinCondition.MOST_LAPS_OVERTIME:
@@ -2073,16 +2076,17 @@ def check_win_team_fastest_consecutive(racecontext, consecutivesCount, **kwargs)
         'status': WinStatus.NONE
     }
 
-def check_win_coop_first_to_x(raceObj, rhDataObj, **kwargs):
+def check_win_coop_first_to_x(racecontext, **kwargs):
+    raceObj = racecontext.race
     if raceObj.format.number_laps_win:  # must have laps > 0 to win
-        leaderboard_output = calc_coop_leaderboard(raceObj, rhDataObj)
-        coop_leaderboard = leaderboard_output.get('leaderboard') if leaderboard_output else None
-        if coop_leaderboard:
-            coop_laps = coop_leaderboard['laps']
-            if coop_laps >= raceObj.format.number_laps_win:  # lap passes win threshold
+        leaderboard_output = calc_coop_leaderboard(racecontext)
+        coop_leaderboard = leaderboard_output.get('by_race_time') if leaderboard_output else None
+        if coop_leaderboard and len(coop_leaderboard) > 0:
+            coop_laps = coop_leaderboard[0].get('laps')
+            if type(coop_laps) is int and coop_laps >= raceObj.format.number_laps_win:  # lap passes win threshold
                 return {
                     'status': WinStatus.DECLARED,
-                    'data': coop_leaderboard
+                    'data': coop_leaderboard[0]
                 }
     return {
         'status': WinStatus.NONE
