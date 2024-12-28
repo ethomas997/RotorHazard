@@ -250,7 +250,8 @@ class RHRace():
                 self.race_time_sec = race_format.race_time_sec
                 if heat_data and race_format and race_format.team_racing_mode == RacingMode.COOP_ENABLED:
                     self._racecontext.rhdata.get_heat_coop_values(heat_data, self)
-                    if race_format.win_condition == WinCondition.FIRST_TO_LAP_X and self.coop_best_time > 0.001:
+                    if race_format.win_condition == WinCondition.FIRST_TO_LAP_X and \
+                                    self.coop_best_time and self.coop_best_time > 0.001:
                         self.unlimited_time = False
                         self.race_time_sec = round(self.coop_best_time, 1)
 
@@ -1786,6 +1787,10 @@ class RHRace():
     def format(self, race_format):
         if self.race_status == RaceStatus.READY:
             if RHRaceFormat.isDbBased(race_format): # stored in DB, not internal race format
+                if self._format and getattr(self._format, 'id', -1) != race_format.id:
+                    self.prev_race_winner_name = ''  # if format changed then clear previous race winner
+                    self.prev_race_winner_phonetic = ''
+                    self.prev_race_winner_pilot_id = RHUtils.PILOT_ID_NONE
                 self._racecontext.rhdata.set_option('currentFormat', race_format.id)
                 # create a shared instance
                 self._format = RHRaceFormat.copy(race_format)
