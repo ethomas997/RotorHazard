@@ -1769,7 +1769,7 @@
 			var format_id = parseInt($('#set_race_format').val());
 			var rf = rotorhazard.event.race_formats.find(obj => {return obj.id == format_id});
 
-			$('.format-race-duration-fields').prop('hidden', (rf.unlimited_time == 0));
+			$('.format-race-duration-fields').prop('hidden', (rf.unlimited_time != 0));
 			$('#format-laps-to-win-field').prop('hidden', (rf.win_condition != 2));
 
 			var issues = []
