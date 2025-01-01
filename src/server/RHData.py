@@ -2882,6 +2882,7 @@ class RHData():
             'format_name': self.__("Co-op Fastest Time to 7 Laps"),
             'unlimited_time': 1,
             'race_time_sec': 0,
+            'lap_grace_sec': -1,
             "staging_fixed_tones": 3,
             'start_delay_min_ms': 1000,
             'start_delay_max_ms': 0,
@@ -2893,29 +2894,16 @@ class RHData():
             'points_method': None
         })
         self.add_format({
-            'format_name': self.__("Co-op Most Laps in Race Time"),
+            'format_name': self.__("Co-op Most Laps in 2:30"),
             'unlimited_time': 0,
             'race_time_sec': 150,
+            'lap_grace_sec': -1,
             "staging_fixed_tones": 3,
             'start_delay_min_ms': 1000,
             'start_delay_max_ms': 0,
             'staging_delay_tones': 2,
             'number_laps_win': 0,
-            'win_condition': WinCondition.MOST_LAPS,
-            'team_racing_mode': RacingMode.COOP_ENABLED,
-            'start_behavior': 0,
-            'points_method': None
-        })
-        self.add_format({
-            'format_name': self.__("Co-op Most Laps - Finish Laps"),
-            'unlimited_time': 0,
-            'race_time_sec': 150,
-            "staging_fixed_tones": 3,
-            'start_delay_min_ms': 1000,
-            'start_delay_max_ms': 0,
-            'staging_delay_tones': 2,
-            'number_laps_win': 0,
-            'win_condition': WinCondition.MOST_LAPS_OVERTIME,
+            'win_condition': WinCondition.MOST_PROGRESS,
             'team_racing_mode': RacingMode.COOP_ENABLED,
             'start_behavior': 0,
             'points_method': None
@@ -3585,20 +3573,21 @@ def getFastestSpeedStr(rhapi, spoken_flag, sel_pilot_id=None):
 def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
     if '%' in text:
         race_results = rhapi.race.results
+        heat_data = None
 
         # %HEAT% : Current heat name or ID value
         if '%HEAT%' in text:
             if 'heat_id' in args:
-                heat = rhapi.db.heat_by_id(args['heat_id'])
+                heat_data = rhapi.db.heat_by_id(args['heat_id'])
             else:
-                heat = rhapi.db.heat_by_id(rhapi.race.heat)
+                heat_data = rhapi.db.heat_by_id(rhapi.race.heat)
 
             heat_name = None
-            if heat:
+            if heat_data:
                 if spoken_flag:
-                    heat_name = heat.display_name_short
+                    heat_name = heat_data.display_name_short
                 else:
-                    heat_name = heat.display_name
+                    heat_name = heat_data.display_name
 
             if not heat_name:
                 heat_name = rhapi.__('None')
@@ -3673,10 +3662,10 @@ def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
         # %RACE_FORMAT% : Current race format
         if '%RACE_FORMAT%' in text:
             format_obj = rhapi.race.raceformat
-            if format_obj:
-                text = text.replace('%RACE_FORMAT%', format_obj.name)
-                text = text.replace(':00 ', (' ' + rhapi.__('minute') + ' '))
-                text = text.replace('/', ' ')
+            fmt_str = getattr(format_obj, 'name', '') if format_obj else ''
+            text = text.replace('%RACE_FORMAT%', fmt_str)
+            text = text.replace(':00 ', (' ' + rhapi.__('minute') + ' '))
+            text = text.replace('/', ' ')
 
         # %PILOTS% : List of pilot callsigns (read out slower)
         if '%PILOTS%' in text:
@@ -3853,6 +3842,31 @@ def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
                         delay_sec_holder.clear()
                         delay_sec_holder.append(float(num_str))
                     text = text[(len(num_str)+vlen):].strip()
+
+        # %COOP_RACE_INFO% : Co-op race mode information (target time or laps)
+        if '%COOP_RACE_INFO%' in text:
+            format_obj = rhapi.race.raceformat
+            info_str = ''
+            if format_obj and format_obj.team_racing_mode == RacingMode.COOP_ENABLED:
+                if not heat_data:
+                    if 'heat_id' in args:
+                        heat_data = rhapi.db.heat_by_id(args['heat_id'])
+                    else:
+                        heat_data = rhapi.db.heat_by_id(rhapi.race.heat)
+                if heat_data:
+                    if format_obj.win_condition == WinCondition.FIRST_TO_LAP_X:
+                        if heat_data.coop_best_time and heat_data.coop_best_time > 0.001:
+                            info_str = rhapi.__('target time is') + ' ' + \
+                                   RHUtils.format_phonetic_time_to_str(int(round(heat_data.coop_best_time,1)*1000), \
+                                           rhapi.config.get_item('UI', 'timeFormatPhonetic'))
+                        else:
+                            info_str = rhapi.__('benchmark race')
+                    else:
+                        if heat_data.coop_num_laps and heat_data.coop_num_laps > 0:
+                            info_str = rhapi.__('target laps is') + ' ' + str(heat_data.coop_num_laps)
+                        else:
+                            info_str = rhapi.__('benchmark race')
+            text = text.replace('%COOP_RACE_INFO%', info_str)
 
     return text
 
