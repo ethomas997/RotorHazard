@@ -83,6 +83,7 @@ class RHRace():
         self.results = None # current race results
         self.cacheStatus = None # whether cache is valid
         self.status_message = '' # Race status message (winner, team info)
+        self.phonetic_status_msg = '' # Phonetic version of 'status_message'
 
         self.team_results = None # current race results
         self.team_cacheStatus = None # whether cache is valid
@@ -258,6 +259,7 @@ class RHRace():
                 self.race_leader_pilot_id = RHUtils.PILOT_ID_NONE
                 self.race_initial_pass_flag = False
                 self.status_message = ''
+                self.phonetic_status_msg = ''
                 self.any_races_started = True
 
                 self.set_race_format_time_fields(race_format, heat_data)
@@ -1223,6 +1225,7 @@ class RHRace():
             self.race_leader_pilot_id = RHUtils.PILOT_ID_NONE
             self.race_initial_pass_flag = False
             self.status_message = ''
+            self.phonetic_status_msg = ''
             self._racecontext.rhui.emit_current_laps() # Race page, blank laps to the web client
             self._racecontext.rhui.emit_current_leaderboard() # Race page, blank leaderboard to the web client
             self._racecontext.rhui.emit_race_status() # Race page, to set race button states
@@ -1354,12 +1357,13 @@ class RHRace():
                 self.race_winner_lap_id = 0
                 self.race_winner_pilot_id = RHUtils.PILOT_ID_NONE
                 self.status_message = ''
+                self.phonetic_status_msg = ''
                 logger.info("Race status msg:  <None>")
                 return win_status_dict
 
             if win_status_dict['status'] == WinStatus.DECLARED:
                 # announce winner
-                status_msg_str = log_msg_str = phonetic_str = None
+                status_msg_str = phonetic_status_msg = log_msg_str = phonetic_str = None
                 win_data = win_status_dict['data']
                 winner_flag = True
                 if race_format.team_racing_mode == RacingMode.TEAM_ENABLED:
@@ -1420,8 +1424,9 @@ class RHRace():
                                                     phonetic_diff_str
                             status_msg_str = self.__("Race done") + ", " + new_best_str + self.__("co-op time is") + \
                                              " " + coop_time + diff_str
-                            phonetic_str = self.__("Race done") + ", " + new_best_str + self.__("co-op time is") + \
-                                           " " + phonetic_time + phonetic_diff_str
+                            phonetic_status_msg = new_best_str + self.__("co-op time is") + " " + \
+                                                  phonetic_time + phonetic_diff_str
+                            phonetic_str = self.__("Race done") + ", " + phonetic_status_msg
                     else:  # co-op race most laps in fixed time
                         coop_laps = coop_leaderboard.get('laps') if type(coop_leaderboard) is dict else None
                         if coop_laps:
@@ -1444,8 +1449,9 @@ class RHRace():
                                     self.coop_num_laps = coop_laps
                             status_msg_str = self.__("Race done") + ", " + new_best_str + self.__("co-op lap count is") + \
                                              " " + str(coop_laps) + prev_laps_str
-                            phonetic_str = self.__("Race done") + ", " + new_best_str + self.__("co-op lap count is") + \
-                                           " " + str(coop_laps) + prev_laps_str
+                            phonetic_status_msg = new_best_str + self.__("co-op lap count is") + " " + \
+                                                  str(coop_laps) + prev_laps_str
+                            phonetic_str = self.__("Race done") + ", " + phonetic_status_msg
 
                 else:
                     win_str = win_data.get('callsign', '')
@@ -1470,6 +1476,7 @@ class RHRace():
                 if status_msg_str and ((not del_lap_flag) or self.win_status != previous_win_status or \
                                             status_msg_str != self.status_message):
                     self.status_message = status_msg_str
+                    self.phonetic_status_msg = phonetic_status_msg if phonetic_status_msg else status_msg_str
                     logger.info(log_msg_str)
                     self._racecontext.rhui.emit_phonetic_text(phonetic_str, 'race_winner', winner_flag)
                     if win_status_dict.get('race_win_event_flag', True):
