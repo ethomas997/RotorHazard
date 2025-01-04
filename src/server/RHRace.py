@@ -1472,13 +1472,14 @@ class RHRace():
                     self.status_message = status_msg_str
                     logger.info(log_msg_str)
                     self._racecontext.rhui.emit_phonetic_text(phonetic_str, 'race_winner', winner_flag)
-                    self._racecontext.events.trigger(Evt.RACE_WIN, {
-                        'win_status': win_status_dict,
-                        'message': self.status_message,
-                        'node_index': win_data.get('node', -1),
-                        'color': self.seat_colors[win_data['node']] \
-                                                if 'node' in win_data else None,
-                        })
+                    if win_status_dict.get('race_win_event_flag', True):
+                        self._racecontext.events.trigger(Evt.RACE_WIN, {
+                            'win_status': win_status_dict,
+                            'message': self.status_message,
+                            'node_index': win_data.get('node', -1),
+                            'color': self.seat_colors[win_data['node']] \
+                                                    if 'node' in win_data else None,
+                            })
 
             elif win_status_dict['status'] == WinStatus.TIE:
                 # announce tied
