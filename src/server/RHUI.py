@@ -900,7 +900,9 @@ class RHUI():
             current_heat['status'] = heat.status
             current_heat['auto_frequency'] = heat.auto_frequency
             current_heat['active'] = heat.active
-            current_heat['coop_best_time'] = heat.coop_best_time
+            current_heat['coop_best_time'] = RHUtils.format_secs_to_duration_str(heat.coop_best_time) \
+                                    if isinstance(heat.coop_best_time, (int, float)) and \
+                                                        heat.coop_best_time >= 0.001 else ''
             current_heat['coop_num_laps'] = heat.coop_num_laps
             current_heat['next_round'] = self._racecontext.rhdata.get_max_round(heat.id)
 

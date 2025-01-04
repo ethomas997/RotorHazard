@@ -1248,7 +1248,7 @@ class RHData():
         if 'active' in data:
             heat.active = data['active']
         if 'coop_best_time' in data:
-            heat.coop_best_time = data['coop_best_time']
+            heat.coop_best_time = RHUtils.parse_duration_str_to_secs(data['coop_best_time'])
         if 'coop_num_laps' in data:
             heat.coop_num_laps = data['coop_num_laps']
 
@@ -3859,9 +3859,12 @@ def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
                 if heat_data:
                     if format_obj.win_condition == WinCondition.FIRST_TO_LAP_X:
                         if heat_data.coop_best_time and heat_data.coop_best_time > 0.001:
-                            info_str = rhapi.__('target time is') + ' ' + \
-                                   RHUtils.format_phonetic_time_to_str(int(round(heat_data.coop_best_time,1)*1000), \
-                                           rhapi.config.get_item('UI', 'timeFormatPhonetic'))
+                            c_time_ms = int(round(heat_data.coop_best_time,1)*1000)
+                            c_time_str = RHUtils.format_phonetic_time_to_str(c_time_ms, \
+                                        rhapi.config.get_item('UI', 'timeFormatPhonetic')) \
+                                        if spoken_flag else RHUtils.format_time_to_str(c_time_ms, \
+                                                            rhapi.config.get_item('UI', 'timeFormat'))
+                            info_str = rhapi.__('target time is') + ' ' + c_time_str
                         else:
                             info_str = rhapi.__('benchmark race')
                     else:
@@ -3870,6 +3873,11 @@ def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
                         else:
                             info_str = rhapi.__('benchmark race')
             text = text.replace('%COOP_RACE_INFO%', info_str)
+
+        # %RACE_RESULT% : Race result status message (race winner or co-op result)
+        if '%RACE_RESULT%' in text:
+            result_str = rhapi.race.phonetic_status_msg if spoken_flag else rhapi.race.status_message
+            text = text.replace('%RACE_RESULT%', result_str if result_str else '')
 
     return text
 

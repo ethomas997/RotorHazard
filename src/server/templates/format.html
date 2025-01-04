@@ -1210,7 +1210,7 @@
 			var heat_id = parseInt($(this).data('heat'));
 			var data = {
 				heat: heat_id,
-				coop_best_time: parseFloat($(this).val()),
+				coop_best_time: $(this).val(),
 				coop_data_flag: true  // set flag to indicate only co-op data was modified
 			};
 			socket.emit('alter_heat', data);
