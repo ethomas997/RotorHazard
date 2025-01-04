@@ -272,8 +272,10 @@ The variables listed below may be used for the  effects.
 | %FREQS%                   | List of pilot callsigns and frequency assignments                       |
 | %LEADER%                  | Callsign of pilot currently leading race                                |
 | %LEADER_CALL%             | Callsign of pilot currently leading race, in the form "NAME is leading" |
-| %SPLIT_TIME%              | Split time for pilot (see [Secondary / Split Timers](../doc/Cluster.md) doc)  |
-| %SPLIT_SPEED%             | Split speed for pilot (see [Secondary / Split Timers](../doc/Cluster.md) doc) |
+| %SPLIT_TIME%              | Split time for pilot (see [Secondary / Split Timers](../doc/Cluster.md) doc)          |
+| %SPLIT_SPEED%             | Split speed for pilot (see [Secondary / Split Timers](../doc/Cluster.md) doc)         |
+| %RACE_RESULT%             | Race result status message (race winner or co-op result)                |
+| %COOP_RACE_INFO%          | Co-op race mode information (target time or laps)                       |
 | %CURRENT_TIME_AP%         | Current time (12-hour clock)                                            |
 | %CURRENT_TIME_24%         | Current time (24-hour clock)                                            |
 | %CURRENT_TIME_SECS_AP%    | Current time, with seconds (12-hour clock)                              |
