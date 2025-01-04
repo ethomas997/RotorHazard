@@ -2085,7 +2085,8 @@ def check_win_coop_first_to_x(racecontext, **kwargs):
             if type(coop_laps) is int and coop_laps >= raceObj.format.number_laps_win:  # lap passes win threshold
                 return {
                     'status': WinStatus.DECLARED,
-                    'data': coop_leaderboard[0]
+                    'data': coop_leaderboard[0],
+                    'race_win_event_flag': False  # don't trigger RACE_WIN event on co-op race
                 }
     return {
         'status': WinStatus.NONE
@@ -2103,7 +2104,8 @@ def check_win_coop_most_laps(racecontext, **kwargs):
                 if type(coop_laps) is int and coop_laps > 0:  # at least one co-op lap results in "winner" condition
                     return {
                         'status': WinStatus.DECLARED,
-                        'data': coop_leaderboard[0]
+                        'data': coop_leaderboard[0],
+                        'race_win_event_flag': False  # don't trigger RACE_WIN event on co-op race
                     }
     return {
         'status': WinStatus.NONE
