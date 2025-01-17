@@ -941,9 +941,11 @@ class RHRace():
                                         # if winning team has been declared then don't announce team lap number
                                         if self.win_status == WinStatus.DECLARED:
                                             team_phonetic = ' '
+                                            team_short_phonetic = None
                                         else:
                                             team_phonetic = self.__("Team") + " " + team_name + ", " + self.__("Lap") + \
                                                             " " + str(team_laps)
+                                            team_short_phonetic = self.__("Lap") + " " + str(team_laps)
                                         self._racecontext.rhui.emit_phonetic_data(pilot_id, lap_id, lap_time, team_phonetic, \
                                                         (check_leader and \
                                                          team_name == Results.get_leading_team_name(self.team_results)), \
@@ -956,10 +958,13 @@ class RHRace():
                                         # if win has been declared then don't announce coop lap number
                                         if self.win_status == WinStatus.DECLARED:
                                             team_phonetic = ' '
+                                            team_short_phonetic = None
                                         else:
                                             team_phonetic =  self.__("Co-op") + " " +  self.__("Lap") + " " + str(coop_laps)
+                                            team_short_phonetic = self.__("Lap") + " " + str(coop_laps)
                                         self._racecontext.rhui.emit_phonetic_data(pilot_id, lap_id, lap_time, \
-                                                                                  team_phonetic, False, node_finished_flag, node.index)
+                                                            team_phonetic, False, node_finished_flag, node.index, \
+                                                            team_short_phonetic=team_short_phonetic)
                                     else:
                                         if check_leader:
                                             leader_pilot_id = Results.get_leading_pilot_id(self, self._racecontext.interface, True)
