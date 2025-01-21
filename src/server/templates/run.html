@@ -14,7 +14,7 @@
 		'node_data',
 		'frequency_data',
 		'pilot_data',
-		'heat_data',
+		'heat_list',
 		'class_data',
 		'format_data',
 		'node_tuning',
@@ -545,6 +545,11 @@
 					freq.updateBlock(fObj, i);
 				}
 			}
+		});
+
+		socket.on('heat_list', function (msg) {
+			rotorhazard.event.heats = msg.heats;
+			display_heats();
 		});
 
 		socket.on('heat_data', function (msg) {
