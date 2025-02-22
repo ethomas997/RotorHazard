@@ -2017,26 +2017,6 @@
 			});
 		});
 
-		$(document).on("change", '.set_heat_coop_best_time', function (event) {
-			var heat_id = parseInt($(this).data('heat'));
-			var data = {
-				heat: heat_id,
-				coop_best_time: $(this).val(),
-				coop_data_flag: true  // set flag to indicate only co-op data was modified
-			};
-			socket.emit('alter_heat', data);
-		});
-
-		$(document).on("change", '.set_heat_coop_num_laps', function (event) {
-			var heat_id = parseInt($(this).data('heat'));
-			var data = {
-				heat: heat_id,
-				coop_num_laps: parseInt($(this).val()),
-				coop_data_flag: true  // set flag to indicate only co-op data was modified
-			};
-			socket.emit('alter_heat', data);
-		});
-
 		$(document).on("focus", '.set_heat_attr', function(){
 			$(this).select();
 		});
@@ -2566,7 +2546,6 @@
 				$('#set_points_params').html(svg_asset.gear);
 
 				display_format();
-				display_unclassified_heats();  // update to show/hide fields for co-op racing mode
 			}
 		}
 
@@ -2677,7 +2656,6 @@
 		$('#set_race_format').change(function (event) {
 			current_format = $('#set_race_format').val();
 			display_format();
-			display_unclassified_heats();  // update to show/hide fields for co-op racing mode
 
 		});
 
@@ -2841,7 +2819,6 @@
 			var rf = rotorhazard.event.race_formats.find(obj => {return obj.id == format_id});
 			rf.win_condition = win_condition;
 			update_race_format_ui();
-			display_unclassified_heats();  // update to show/hide fields for co-op racing mode
 		})
 
 		$('#set_number_laps_win').change(function (event) {
@@ -2868,7 +2845,6 @@
 
 			var rf = rotorhazard.event.race_formats.find(obj => {return obj.id == format_id});
 			rf.team_racing_mode = team_racing_mode;
-			display_unclassified_heats();  // update to show/hide fields for co-op racing mode
 		})
 
 		$('#set_points_method').change(function (event) {
