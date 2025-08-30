@@ -13,6 +13,7 @@ import logging
 import RHUtils
 from RHUI import UIField, UIFieldType
 from eventmanager import Evt
+from led_event_manager import call_strip_led_on_fn, ColorVal, ColorPattern
 
 logger = logging.getLogger(__name__)
 
@@ -999,6 +1000,9 @@ class LEDAPI():
 
     def activate_effect(self, args):
         return self._racecontext.led_manager.activateEffect(args)
+
+    def set_pattern(self, color=ColorVal.WHITE, pattern=ColorPattern.SOLID, offset=0):
+        return call_strip_led_on_fn(self._racecontext.led_manager.strip, color, pattern, offset)
 
 
 #
