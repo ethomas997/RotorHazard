@@ -1422,6 +1422,10 @@ class ServerAPI():
     def data_dir(self):
         return self._racecontext.serverstate.data_dir
 
+    def start_background_threads(self):
+        if callable(self._racecontext.server_start_background_threads_fn):
+            self._racecontext.server_start_background_threads_fn()
+
 #
 # Filters
 #
