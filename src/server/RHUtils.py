@@ -446,7 +446,7 @@ def launchBrowser(hostStr, httpPortNum=0, pageNameStr=None, launchCmdStr=None):
         logger.exception("Error launching browser")
 
 def cleanVarName(varStr): 
-    return re.sub(r'\W|^(?=\d)','_', varStr)
+    return re.sub(r'\W|^(?=\d)','_', varStr) if varStr is not None else varStr
 
 # Logs a warning message if the version of python in use is lower than the specified version
 def checkPythonVersion(majorVer, minorVer):

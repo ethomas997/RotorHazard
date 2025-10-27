@@ -49,10 +49,7 @@ class DataImportManager():
 
 class DataImporter():
     def __init__(self, label, import_fn, default_args=None, settings:List[UIField]=None, name=None):
-        if name is None:
-            self.name = cleanVarName(label)
-        else:
-            self.name = name
+        self.name = cleanVarName(label)
 
         self.label = label
         self.import_fn = import_fn

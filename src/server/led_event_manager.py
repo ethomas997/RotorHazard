@@ -314,8 +314,7 @@ def effect_delay(ms, args):
 
 class LEDEffect():
     def __init__(self, label, handler_fn, valid_events, default_args=None, name=None):
-        if name is None:
-            name = cleanVarName(label)
+        name = cleanVarName(label)
 
         self.label = label
         self.handler_fn = handler_fn

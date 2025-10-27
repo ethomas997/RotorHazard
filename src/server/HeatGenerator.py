@@ -192,10 +192,7 @@ class HeatGeneratorManager():
 
 class HeatGenerator():
     def __init__(self, label, generator_fn, default_args=None, settings:List[UIField]=None, name=None):
-        if name is None:
-            self.name = cleanVarName(label)
-        else:
-            self.name = name
+        self.name = cleanVarName(label)
 
         self.label = label
         self._generator = generator_fn

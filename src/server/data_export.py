@@ -44,10 +44,7 @@ class DataExportManager():
 
 class DataExporter():
     def __init__(self, label, formatter_fn, assembler_fn, name=None):
-        if name is None:
-            self.name = cleanVarName(label)
-        else:
-            self.name = name
+        self.name = cleanVarName(label)
 
         self.label = label
         self.formatter = formatter_fn

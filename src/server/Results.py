@@ -59,10 +59,7 @@ class RaceClassRankManager():
 
 class RaceClassRankMethod():
     def __init__(self, label, rank_fn, default_args=None, settings:List[UIField]=None, name=None):
-        if name is None:
-            self.name = cleanVarName(label)
-        else:
-            self.name = name
+        self.name = cleanVarName(label)
 
         self.label = label
         self.rank_fn = rank_fn
@@ -103,10 +100,7 @@ class RacePointsManager():
 
 class RacePointsMethod():
     def __init__(self, label, assign_fn, default_args=None, settings:List[UIField]=None, name=None):
-        if name is None:
-            self.name = cleanVarName(label)
-        else:
-            self.name = name
+        self.name = cleanVarName(label)
 
         self.label = label
         self.assignFn = assign_fn

@@ -69,10 +69,7 @@ class EventActions:
 
 class ActionEffect():
     def __init__(self, label, effect_fn, fields:List[UIField], name=None):
-        if name is None:
-            self.name = cleanVarName(label)
-        else:
-            self.name = name
+        self.name = cleanVarName(label)
 
         self.label = label
         self.effect_fn = effect_fn
