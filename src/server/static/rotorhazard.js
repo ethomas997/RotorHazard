@@ -27,6 +27,7 @@ const RACING_MODE_COOP = 2;   // COOP_ENABLED
 var speakObjsQueue = [];
 var checkSpeakQueueFlag = true;
 var checkSpeakQueueCntr = 0;
+var socketConnectedStatusFlag = true;
 
 /* global functions */
 function supportsLocalStorage() {
@@ -1669,8 +1670,13 @@ jQuery(document).ready(function($){
 	function socket_listener() {
 		if (socket.connected) {
 			$('.socket-warning').slideUp();
+			if (!socketConnectedStatusFlag) {
+			    socketConnectedStatusFlag = true;
+			    location.reload(true);
+			}
 		} else {
 			$('.socket-warning').slideDown();
+			socketConnectedStatusFlag = false;
 		}
 	}
 	setInterval(socket_listener, 1000);
