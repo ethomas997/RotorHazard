@@ -143,6 +143,9 @@
 	<button id="pause-updates">{{ __('Pause Updates') }}</button>
 	<button id="select-log">{{ __('Select Text') }}</button>
 	<button id="download_logs">{{ __('Download Logs') }}</button>
+	{% if Debug %}
+	<a href="/settings" class="button-like">{{ __('Settings') }}</a>
+	{% endif %}
 	&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;
 </div>
 	<div id="download_logs_progress" class="priority-message-interrupt mfp-hide popup">
