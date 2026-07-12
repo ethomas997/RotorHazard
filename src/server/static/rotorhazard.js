@@ -1736,6 +1736,15 @@ jQuery(document).ready(function($){
 		$('.restart-warning').slideDown();
 	});
 
+	$('button#cancel_restart_required').click(function (event) {
+		socket.emit('cancel_restart_required');
+		return false;
+	});
+
+	socket.on('restart_not_required', function (msg) {
+		$('.restart-warning').slideUp();
+	});
+
 	// load needed data from server when required
 	socket.on('load_all', function (msg) {
 		if (!reloading) {

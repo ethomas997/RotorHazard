@@ -109,6 +109,7 @@
 
 	<aside class="restart-warning" {% if not restart_flag %}style="display:none"{% endif %}>
 		{{ __('System settings modified. Restart to apply and avoid unexpected behavior.') }} <a href="#restart_confirm" class="admin-hide btn-danger button-like open-mfp-popup">{{ __('Restart') }}</a>
+		{% if Debug %}<button id="cancel_restart_required" class="admin-hide">{{ __('Cancel') }}</button>{% endif %}
 	</aside>
 
 	<!--Child template content-->

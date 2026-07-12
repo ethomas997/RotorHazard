@@ -337,3 +337,10 @@ class ServerState:
             if self._racecontext.rhui:
                 self._racecontext.rhui.emit_upd_cfg_files_list()
                 self._racecontext.rhui.emit_restart_required()
+
+    def clear_restart_required(self):
+        if self.restart_required:
+            self.restart_required = False
+            self.restart_sleep_secs = None
+            if self._racecontext.rhui:
+                self._racecontext.rhui.emit_restart_not_required()
