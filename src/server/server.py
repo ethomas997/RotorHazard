@@ -65,7 +65,7 @@ import signal
 import werkzeug
 import urllib3
 
-from flask import Flask, send_from_directory, request, make_response, Response, templating, redirect, abort, copy_current_request_context
+from flask import Flask, send_from_directory, request, make_response, Response, templating, redirect, abort, copy_current_request_context, session
 from flask.blueprints import Blueprint
 from flask_socketio import SocketIO, emit
 
@@ -428,6 +428,43 @@ def requires_auth(f):
     def decorated_auth(*args, **kwargs):
         if not check_auth(request.authorization):
             return authenticate()
+        return f(*args, **kwargs)
+    return decorated_auth
+
+def requires_socketio_auth(f):
+    '''Guards administrative/destructive SocketIO event handlers.
+    Unlike @requires_auth, this cannot return an HTTP 401 (there is no
+    HTTP response to send back over an established SocketIO connection),
+    so it just logs and drops the event instead of invoking the handler.
+    Several of these handler functions are also called directly (as plain
+    Python calls, not via a dispatched SocketIO event) from server startup
+    and background-thread code, which has no Flask request context. In
+    that case `request.authorization` raises RuntimeError; treat that as
+    a trusted internal call and let it through unchecked.
+    A successful check is cached in the SocketIO connection's own session
+    (separate from the browser's HTTP cookie session; reset on
+    disconnect/reload) so later events on the same connection don't
+    re-validate the Basic Auth header. That header is a fixed pair cached
+    by the browser and can't be refreshed mid-connection, so if admin
+    credentials are changed via one guarded event, live-rechecking every
+    subsequent event against the new credentials would reject the
+    browser's now-stale header and lock the page out for the rest of
+    that connection.
+    '''
+    @functools.wraps(f)
+    def decorated_auth(*args, **kwargs):
+        try:
+            auth = request.authorization
+        except RuntimeError:
+            return f(*args, **kwargs)
+        if session.get('socketio_admin_auth'):
+            return f(*args, **kwargs)
+        if not check_auth(auth):
+            logger.warning("Rejected unauthenticated SocketIO event '%s' from %s",
+                            f.__name__, request.remote_addr)
+            RaceContext.rhui.emit_priority_message(__('Action requires authentication.'), False, nobroadcast=True)
+            return
+        session['socketio_admin_auth'] = True
         return f(*args, **kwargs)
     return decorated_auth
 
@@ -992,6 +1029,7 @@ def on_broadcast_message(data):
 # Settings socket io events
 
 @SOCKET_IO.on('set_frequency')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_frequency(data):
     '''Set node frequency.'''
@@ -1044,6 +1082,7 @@ def on_set_frequency(data):
         heartbeat_thread_function.imdtabler_flag = True
 
 @SOCKET_IO.on('set_frequency_preset')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_frequency_preset(data):
     ''' Apply preset frequencies '''
@@ -1124,6 +1163,7 @@ def restore_node_frequency(node_index):
     logger.info('Frequency restored: Node {0} Frequency {1}'.format(node_index+1, freq))
 
 @SOCKET_IO.on('set_enter_at_level')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_enter_at_level(data):
     '''Set node enter-at level.'''
@@ -1132,6 +1172,7 @@ def on_set_enter_at_level(data):
     RaceContext.calibration.set_enter_at_level(seat_index, enter_at_level)
 
 @SOCKET_IO.on('set_exit_at_level')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_exit_at_level(data):
     '''Set node exit-at level.'''
@@ -1140,6 +1181,7 @@ def on_set_exit_at_level(data):
     RaceContext.calibration.set_exit_at_level(seat_index, exit_at_level)
 
 @SOCKET_IO.on("set_start_thresh_lower_amount")
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_start_thresh_lower_amount(data):
     start_thresh_lower_amount = data['start_thresh_lower_amount']
@@ -1148,6 +1190,7 @@ def on_set_start_thresh_lower_amount(data):
     RaceContext.rhui.emit_start_thresh_lower_amount(noself=True)
 
 @SOCKET_IO.on("set_start_thresh_lower_duration")
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_start_thresh_lower_duration(data):
     start_thresh_lower_duration = data['start_thresh_lower_duration']
@@ -1156,12 +1199,14 @@ def on_set_start_thresh_lower_duration(data):
     RaceContext.rhui.emit_start_thresh_lower_duration(noself=True)
 
 @SOCKET_IO.on('set_language')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_language(data):
     '''Set interface language.'''
     RaceContext.serverconfig.set_item('UI', 'currentLanguage', data['language'])
 
 @SOCKET_IO.on('cap_enter_at_btn')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_cap_enter_at_btn(data):
     '''Capture enter-at level.'''
@@ -1170,6 +1215,7 @@ def on_cap_enter_at_btn(data):
         logger.info('Starting capture of enter-at level for node {0}'.format(node_index+1))
 
 @SOCKET_IO.on('cap_exit_at_btn')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_cap_exit_at_btn(data):
     '''Capture exit-at level.'''
@@ -1178,6 +1224,7 @@ def on_cap_exit_at_btn(data):
         logger.info('Starting capture of exit-at level for node {0}'.format(node_index+1))
 
 @SOCKET_IO.on('set_scan')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_scan(data):
     global HEARTBEAT_DATA_RATE_FACTOR
@@ -1209,6 +1256,7 @@ def on_get_class_recents(data):
         RaceContext.rhui.emit_recent_heats(data['class_id'], 6) # TODO: Place var in UI Config
 
 @SOCKET_IO.on('add_heat')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_add_heat(data=None):
     '''Adds the next available heat number to the database.'''
@@ -1225,12 +1273,14 @@ def on_add_heat(data=None):
     RaceContext.rhui.emit_race_status()
 
 @SOCKET_IO.on('duplicate_heat')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_duplicate_heat(data):
     RaceContext.rhdata.duplicate_heat(data['heat'])
     RaceContext.rhui.emit_heat_data()
 
 @SOCKET_IO.on('deactivate_heat')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_deactivate_heat(data):
     RaceContext.rhdata.alter_heat({
@@ -1240,6 +1290,7 @@ def on_deactivate_heat(data):
     RaceContext.rhui.emit_heat_data()
 
 @SOCKET_IO.on('activate_heat')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_activate_heat(data):
     RaceContext.rhdata.alter_heat({
@@ -1249,6 +1300,7 @@ def on_activate_heat(data):
     RaceContext.rhui.emit_heat_data()
 
 @SOCKET_IO.on('alter_heat')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_alter_heat(data):
     '''Update heat.'''
@@ -1267,6 +1319,7 @@ def on_alter_heat(data):
     RaceContext.rhui.emit_race_status()
 
 @SOCKET_IO.on('delete_heat')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_delete_heat(data):
     '''Delete heat.'''
@@ -1281,6 +1334,7 @@ def on_delete_heat(data):
         RaceContext.rhui.emit_race_status()
 
 @SOCKET_IO.on('add_race_class')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_add_race_class(*args):
     '''Adds the next available pilot id number in the database.'''
@@ -1289,6 +1343,7 @@ def on_add_race_class(*args):
     RaceContext.rhui.emit_heat_data() # Update class selections in heat displays
 
 @SOCKET_IO.on('duplicate_race_class')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_duplicate_race_class(data):
     '''Adds new race class by duplicating an existing one.'''
@@ -1297,6 +1352,7 @@ def on_duplicate_race_class(data):
     RaceContext.rhui.emit_heat_data()
 
 @SOCKET_IO.on('alter_race_class')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_alter_race_class(data):
     '''Update race class.'''
@@ -1318,6 +1374,7 @@ def on_alter_race_class(data):
         RaceContext.rhui.emit_current_heat(noself=True) # in case race operator is a different client, update locked format dropdown
 
 @SOCKET_IO.on('delete_class')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_delete_class(data):
     '''Delete class.'''
@@ -1327,6 +1384,7 @@ def on_delete_class(data):
         RaceContext.rhui.emit_heat_data()
 
 @SOCKET_IO.on('add_pilot')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_add_pilot(*args):
     '''Adds the next available pilot id number in the database.'''
@@ -1335,6 +1393,7 @@ def on_add_pilot(*args):
     RaceContext.rhui.emit_heat_data()
 
 @SOCKET_IO.on('alter_pilot')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_alter_pilot(data):
     '''Update pilot.'''
@@ -1353,6 +1412,7 @@ def on_alter_pilot(data):
     RaceContext.race.clear_results() # refresh current leaderboard
 
 @SOCKET_IO.on('delete_pilot')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_delete_pilot(data):
     '''Delete pilot.'''
@@ -1363,6 +1423,7 @@ def on_delete_pilot(data):
         RaceContext.rhui.emit_heat_data()
 
 @SOCKET_IO.on('set_seat_color')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_seat_color(data):
     '''Update seat color.'''
@@ -1390,6 +1451,7 @@ def on_set_seat_color(data):
         })
 
 @SOCKET_IO.on('reset_seat_color')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_reset_seat_color(*args):
     '''Update seat color.'''
@@ -1406,6 +1468,7 @@ def on_reset_seat_color(*args):
         })
 
 @SOCKET_IO.on('add_profile')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_add_profile(*args):
     '''Adds new profile (frequency set) in the database.'''
@@ -1415,6 +1478,7 @@ def on_add_profile(*args):
     on_set_profile({ 'profile': new_profile.id })
 
 @SOCKET_IO.on('alter_profile')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_alter_profile(data):
     ''' update profile '''
@@ -1426,6 +1490,7 @@ def on_alter_profile(data):
     RaceContext.rhui.emit_node_tuning(noself=True)
 
 @SOCKET_IO.on('delete_profile')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_delete_profile(*args):
     '''Delete profile'''
@@ -1438,6 +1503,7 @@ def on_delete_profile(*args):
         on_set_profile({ 'profile': first_profile_id })
 
 @SOCKET_IO.on("set_profile")
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_profile(data, emit_vals=True):
     ''' set current profile '''
@@ -1512,6 +1578,7 @@ def on_set_profile(data, emit_vals=True):
         logger.warning('Invalid set_profile value: ' + str(profile_val))
 
 @SOCKET_IO.on('alter_race')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_alter_race(data):
     '''Update race (retroactively via marshaling).'''
@@ -1531,6 +1598,7 @@ def on_alter_race(data):
 
 
 @SOCKET_IO.on('backup_database')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_backup_database(*args):
     '''Backup database.'''
@@ -1543,6 +1611,7 @@ def on_backup_database(*args):
     on_list_backups()
 
 @SOCKET_IO.on('download_database')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_download_database(data):
     '''Download selected event database file.'''
@@ -1565,6 +1634,7 @@ def download_database(db_file):
     emit('database_bkp_done', emit_payload)
 
 @SOCKET_IO.on('list_backups')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_list_backups(*args):
     '''List database files in db_bkp'''
@@ -1622,6 +1692,7 @@ def restore_database_file(db_file_name):
         return success
 
 @SOCKET_IO.on('restore_database')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_restore_database(data):
     '''Restore database.'''
@@ -1647,6 +1718,7 @@ def on_restore_database(data):
         RaceContext.rhui.emit_priority_message(message, False, nobroadcast=True)
 
 @SOCKET_IO.on('delete_database')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_delete_database_file(data):
     '''Restore database.'''
@@ -1672,6 +1744,7 @@ def on_delete_database_file(data):
             logger.warning('Unable to delete {0}: File does not exist'.format(backup_file))
 
 @SOCKET_IO.on('reset_database')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_reset_database(data):
     '''Reset database.'''
@@ -1745,6 +1818,7 @@ def on_reset_database(data):
     Events.trigger(Evt.DATABASE_RESET)
 
 @SOCKET_IO.on('export_database')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_export_database_file(data):
     '''Run the selected Exporter'''
@@ -1776,6 +1850,7 @@ def on_export_database_file(data):
     RaceContext.rhui.emit_priority_message(__('Data export failed. (See log)'), False, nobroadcast=True)
 
 @SOCKET_IO.on('import_data')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_import_file(data):
     '''Run the selected Importer'''
@@ -1806,6 +1881,7 @@ def on_import_file(data):
     RaceContext.rhui.emit_priority_message(__('Data import failed. (See log)'), True, nobroadcast=True)
 
 @SOCKET_IO.on('generate_heats_v2')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_generate_heats_v2(data):
     '''Run the selected Generator'''
@@ -1846,6 +1922,7 @@ def on_generate_heats_v2(data):
     RaceContext.rhui.emit_priority_message(__('Heat generation failed. (See log)'), False, nobroadcast=True)
 
 @SOCKET_IO.on('shutdown_pi')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_shutdown_pi(*args):
     '''Shutdown the raspberry pi.'''
@@ -1869,6 +1946,7 @@ def on_shutdown_pi(*args):
         logger.warning("Not executing system shutdown command because not RPi")
 
 @SOCKET_IO.on('reboot_pi')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_reboot_pi(*args):
     '''Reboot the raspberry pi.'''
@@ -1890,6 +1968,7 @@ def on_reboot_pi(*args):
         logger.warning("Not executing system reboot command because not RPi")
 
 @SOCKET_IO.on('restart_server')
+@requires_socketio_auth
 def on_restart_server():
     '''Re-execute the current process.'''
     RaceContext.rhui.emit_server_restarting()
@@ -1924,6 +2003,7 @@ def on_restart_server():
     gevent.spawn(SOCKET_IO.stop)  # shut down flask http server
 
 @SOCKET_IO.on('kill_server')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_kill_server(*args):
     '''Shutdown this server.'''
@@ -1937,6 +2017,7 @@ def on_kill_server(*args):
     gevent.spawn(SOCKET_IO.stop)  # shut down flask http server
 
 @SOCKET_IO.on('set_log_level')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_set_log_level(data):
     '''Set minimum log level shown on Server Log page.'''
@@ -1951,6 +2032,7 @@ def on_set_log_level(data):
         gevent.spawn_later(0.05, SOCKET_IO.emit, 'do_log_page_refresh')
 
 @SOCKET_IO.on('download_logs')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_download_logs(data):
     '''Download logs (as .zip file).'''
@@ -1974,6 +2056,7 @@ def on_download_logs(data):
             logger.exception("Error downloading logs-zip file")
 
 @SOCKET_IO.on('backup_settings')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_backup_settings(*args):
     '''Make backup copy of config-settings file.'''
@@ -1985,6 +2068,7 @@ def on_backup_settings(*args):
         RaceContext.rhui.emit_upd_cfg_files_list()
 
 @SOCKET_IO.on('download_settings')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_download_settings(*args):
     '''Make backup copy of config-settings file and download it.'''
@@ -2003,6 +2087,7 @@ def on_download_settings(*args):
         emit('send_config_file', emit_payload)
 
 @SOCKET_IO.on('reset_settings_to_defaults')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_reset_settings_to_defaults(*args):
     '''Reset settings to default values.'''
@@ -2013,6 +2098,7 @@ def on_reset_settings_to_defaults(*args):
     on_restart_server()
 
 @SOCKET_IO.on('restore_cfg_file')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_restore_cfg_file(data):
     '''Restore config-settings-backup file.'''
@@ -2038,6 +2124,7 @@ def on_restore_cfg_file(data):
             logger.warning("Unable to restore cfg file '{0}': File does not exist".format(cfg_path))
 
 @SOCKET_IO.on('rename_cfg_file')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_rename_cfg_file(data):
     '''Rename config-settings-backup file.'''
@@ -2062,6 +2149,7 @@ def on_rename_cfg_file(data):
                 RaceContext.rhui.emit_upd_cfg_files_list()
 
 @SOCKET_IO.on('delete_cfg_file')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_delete_cfg_file(data):
     '''Delete config-settings-backup file.'''
@@ -2078,6 +2166,7 @@ def on_delete_cfg_file(data):
         RaceContext.rhui.emit_upd_cfg_files_list()
 
 @SOCKET_IO.on('load_cfg_file')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_load_cfg_file(data):
     '''Load config-settings-backup file.'''
@@ -2098,6 +2187,7 @@ def on_load_cfg_file(data):
             RaceContext.rhui.emit_priority_message(msg_str, True)
 
 @SOCKET_IO.on("set_min_lap")
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_min_lap(data):
     min_lap = data['min_lap']
@@ -2111,6 +2201,7 @@ def on_set_min_lap(data):
     RaceContext.rhui.emit_min_lap(noself=True)
 
 @SOCKET_IO.on("set_min_first_crossing")
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_min_first_crossing(data):
     min_first_crossing = data['min_first_crossing']
@@ -2124,6 +2215,7 @@ def on_set_min_first_crossing(data):
     RaceContext.rhui.emit_min_lap(noself=True)
 
 @SOCKET_IO.on("set_min_lap_behavior")
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_min_lap_behavior(data):
     min_lap_behavior = int(data['min_lap_behavior'])
@@ -2137,6 +2229,7 @@ def on_set_min_lap_behavior(data):
     RaceContext.rhui.emit_min_lap(noself=True)
 
 @SOCKET_IO.on("set_race_format")
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_race_format(data):
     ''' set current race_format '''
@@ -2163,6 +2256,7 @@ def on_set_race_format(data):
         logger.info("Format change prevented by active race")
 
 @SOCKET_IO.on('add_race_format')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_add_race_format(data):
     '''Adds new format in the database by duplicating an existing one.'''
@@ -2171,6 +2265,7 @@ def on_add_race_format(data):
     RaceContext.rhui.emit_format_data()
 
 @SOCKET_IO.on('alter_race_format')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_alter_race_format(data):
     ''' update race format '''
@@ -2196,6 +2291,7 @@ def on_alter_race_format(data):
         RaceContext.rhui.emit_priority_message(__('Format alteration prevented by active race: Stop and save/discard laps'), False, nobroadcast=True)
 
 @SOCKET_IO.on('delete_race_format')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_delete_race_format(data):
     '''Delete race format'''
@@ -2290,6 +2386,7 @@ def emit_led_effects(**_params):
         emit('led_effects', emit_payload)
 
 @SOCKET_IO.on('set_led_event_effect')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_led_effect(data):
     '''Set effect for event.'''
@@ -2313,6 +2410,7 @@ def on_set_led_effect(data):
         logger.info('Set LED event {0} to effect {1}'.format(data['event'], data['effect']))
 
 @SOCKET_IO.on('use_led_effect')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_use_led_effect(data):
     '''Activate arbitrary LED Effect.'''
@@ -2346,22 +2444,26 @@ def on_get_server_time(*args):
     return {'server_time_s': monotonic()}
 
 @SOCKET_IO.on('schedule_race')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_schedule_race(data):
     RaceContext.race.schedule(data['s'], data['m'])
 
 @SOCKET_IO.on('cancel_schedule_race')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def cancel_schedule_race(*args):
     RaceContext.race.schedule(None)
 
 @SOCKET_IO.on('stage_race')
+@requires_socketio_auth
 def on_stage_race(*args):
     result = RaceContext.race.stage(*args)
     if not result:
         RaceContext.rhui.emit_race_status()
 
 @SOCKET_IO.on('stop_race')
+@requires_socketio_auth
 def on_stop_race(*args):
     RaceContext.race.stop(*args)
 
@@ -2370,10 +2472,12 @@ def on_current_race_marshal(*args):
     RaceContext.rhui.emit_race_marshal_data(nobroadcast=True)
 
 @SOCKET_IO.on('save_laps')
+@requires_socketio_auth
 def on_save_race(*args):
     RaceContext.race.save(*args)
 
 @SOCKET_IO.on('resave_laps')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_resave_laps(data):
     heat_id = data['heat_id']
@@ -2472,6 +2576,7 @@ def on_resave_laps(data):
         })
 
 @SOCKET_IO.on('replace_current_laps')
+@requires_socketio_auth
 def replace_current_laps(data):
     on_set_enter_at_level({
         'node': data['seat'],
@@ -2490,11 +2595,13 @@ def build_atomic_result_caches(params):
     RaceContext.rhui.emit_result_data()
 
 @SOCKET_IO.on('discard_laps')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_discard_laps(**kwargs):
     RaceContext.race.discard_laps(**kwargs)
 
 @SOCKET_IO.on('calc_pilots')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_calc_pilots(data):
     heat_id = data['heat']
@@ -2505,12 +2612,14 @@ def on_calc_pilots(data):
     RaceContext.heatautomator.calc_heat(heat_id, preassignments=assignments)
 
 @SOCKET_IO.on('calc_reset')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_calc_reset(data):
     data['status'] = Database.HeatStatus.PLANNED
     on_alter_heat(data)
 
 @SOCKET_IO.on('confirm_heat_plan')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_confirm_heat(data):
     if 'heat_id' in data:
@@ -2526,6 +2635,7 @@ def on_confirm_heat(data):
             RaceContext.race.set_heat(data['heat_id'], force=True)
 
 @SOCKET_IO.on('set_current_heat')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_current_heat(data):
     '''Update the current heat variable and data.'''
@@ -2533,6 +2643,7 @@ def on_set_current_heat(data):
     RaceContext.rhui.emit_race_status()
 
 @SOCKET_IO.on('delete_lap')
+@requires_socketio_auth
 def on_delete_lap(data):
     node_index = data['node']
     lap_index = data['lap_index']
@@ -2544,6 +2655,7 @@ def on_delete_lap(data):
     RaceContext.race.delete_lap(node_index, lap_index)
 
 @SOCKET_IO.on('restore_deleted_lap')
+@requires_socketio_auth
 def on_restore_deleted_lap(data):
     node_index = data['node']
     lap_index = data['lap_index']
@@ -2556,6 +2668,7 @@ def on_restore_deleted_lap(data):
     RaceContext.race.restore_deleted_lap(node_index, lap_index)
 
 @SOCKET_IO.on('simulate_lap')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_simulate_lap(data):
     '''Simulates a lap (for debug testing).'''
@@ -2568,6 +2681,7 @@ def on_simulate_lap(data):
     RaceContext.interface.intf_simulate_lap(node_index, 0)
 
 @SOCKET_IO.on('LED_solid')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_LED_solid(data):
     '''LED Solid Color'''
@@ -2588,6 +2702,7 @@ def on_LED_solid(data):
         })
 
 @SOCKET_IO.on('LED_brightness')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_LED_brightness(data):
     '''Change LED Brightness'''
@@ -2601,6 +2716,7 @@ def on_LED_brightness(data):
         })
 
 @SOCKET_IO.on('set_option')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_option(data):
     RaceContext.rhdata.set_option(data['option'], data['value'])
@@ -2610,6 +2726,7 @@ def on_set_option(data):
         })
 
 @SOCKET_IO.on('set_config')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_set_config(data):
     RaceContext.serverconfig.set_item(data['section'], data['key'], data['value'])
@@ -2620,6 +2737,7 @@ def on_set_config(data):
         })
 
 @SOCKET_IO.on('set_config_section')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_set_config_section(data):
     RaceContext.serverconfig.set_section(data['section'], data['value'])
@@ -2637,6 +2755,7 @@ def on_set_ui_binding_value(data):
             break
 
 @SOCKET_IO.on('set_consecutives_count')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_set_consecutives_count(data):
     RaceContext.rhdata.set_option('consecutivesCount', data['count'])
@@ -2657,6 +2776,7 @@ def get_race_scheduled(*args):
     })
 
 @SOCKET_IO.on('save_callouts')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def save_callouts(data):
     # save callouts to Options
@@ -2691,6 +2811,7 @@ def imdtabler_update_freqs(data):
     RaceContext.rhui.emit_imdtabler_data(IMDTABLER_JAR_NAME, data['freq_list'].replace(',',' ').split())
 
 @SOCKET_IO.on('clean_cache')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def clean_results_cache(*args):
     ''' wipe all results caches '''
@@ -2745,6 +2866,7 @@ def get_pilotrace(data):
             })
 
 @SOCKET_IO.on('check_bpillfw_file')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def check_bpillfw_file(data):
     fileStr = data['src_file_str']
@@ -2812,6 +2934,7 @@ def check_bpillfw_file(data):
         logger.exception("Error processing file '{}' in 'check_bpillfw_file()'".format(fileStr))
 
 @SOCKET_IO.on('do_bpillfw_update')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def do_bpillfw_update(data):
     srcStr = data['src_file_str']
@@ -2846,6 +2969,7 @@ def do_bpillfw_update(data):
     SOCKET_IO.emit('upd_messages_finish')  # show 'Close and Restart' button
 
 @SOCKET_IO.on('set_vrx_node')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def set_vrx_node(data):
     vrx_id = data['vrx_id']
@@ -2863,6 +2987,7 @@ def set_vrx_node(data):
         logger.error("Can't set VRx {0} to node {1}: Controller unavailable".format(vrx_id, node))
 
 @SOCKET_IO.on('plugin_install')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_plugin_install(data):
     plugin_id = 'unknown'
@@ -2886,6 +3011,7 @@ def on_plugin_install(data):
         logger.info("Failed to install plugin {}".format(plugin_id))
 
 @SOCKET_IO.on('plugin_delete')
+@requires_socketio_auth
 @catchLogExceptionsWrapper
 def on_plugin_delete(data):
     if 'domain' in data and data['domain']:
@@ -2900,6 +3026,7 @@ def on_plugin_delete(data):
             logger.info("Failed to delete plugin {}".format(data['domain']))
 
 @SOCKET_IO.on('datadir_handler')
+@requires_socketio_auth
 @catchLogExcWithDBWrapper
 def on_datadir_handler(data):
     method = data['method']
