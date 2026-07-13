@@ -25,9 +25,14 @@ def set_admin_socket_auth_enabled(enabled):
 def check_auth(racecontext, auth):
     '''Check if a username password combination is valid.'''
     global Auth_succeeded_flag
-    # allow open access if both ADMIN fields set to empty string:
+    # allow open access if both ADMIN fields set to empty string, but only
+    # when server-debug-mode is enabled; blank credentials outside debug
+    # mode are a misconfiguration, not an intentional "no auth" setting,
+    # so fall through to the checks below (which will reject the request
+    # unless first-run is still in progress):
     if not racecontext.serverconfig.get_item('SECRETS', 'ADMIN_USERNAME') and \
-        not racecontext.serverconfig.get_item('SECRETS', 'ADMIN_PASSWORD'):
+        not racecontext.serverconfig.get_item('SECRETS', 'ADMIN_PASSWORD') and \
+        racecontext.serverconfig.get_item('GENERAL', 'DEBUG'):
         Auth_succeeded_flag = True
         return True
 
