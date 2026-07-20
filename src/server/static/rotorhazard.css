@@ -652,8 +652,10 @@ body>header {
 	justify-content: space-between;
 	align-items: center;
 	padding: 0 0.5rem;
-	position: relative;
+	position: sticky;
+	top: 0;
 	line-height: 1;
+	z-index: 150;
 }
 
 #timer-name {
