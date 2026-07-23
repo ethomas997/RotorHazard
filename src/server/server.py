@@ -239,6 +239,9 @@ HEARTBEAT_THREAD = None
 BACKGROUND_THREADS_ENABLED = True
 HEARTBEAT_DATA_RATE_FACTOR = 5
 
+# cached copy of GENERAL/ADMIN_SOCKET_AUTH; kept in sync by 'on_set_config'
+ADMIN_SOCKET_AUTH_ENABLED = RaceContext.serverconfig.get_item('GENERAL', 'ADMIN_SOCKET_AUTH')
+
 ERROR_REPORT_INTERVAL_SECS = 600  # delay between comm-error reports to log
 
 IMDTABLER_JAR_NAME =  PROGRAM_DIR + '/static/IMDTabler.jar'
@@ -450,9 +453,13 @@ def requires_socketio_auth(f):
     subsequent event against the new credentials would reject the
     browser's now-stale header and lock the page out for the rest of
     that connection.
+    Can be turned off via the 'Admin Socket Auth' setting (Advanced
+    Settings | HTTP Server), which sets GENERAL/ADMIN_SOCKET_AUTH to False.
     '''
     @functools.wraps(f)
     def decorated_auth(*args, **kwargs):
+        if not ADMIN_SOCKET_AUTH_ENABLED:
+            return f(*args, **kwargs)
         try:
             auth = request.authorization
         except RuntimeError:
@@ -2730,6 +2737,9 @@ def on_set_option(data):
 @catchLogExceptionsWrapper
 def on_set_config(data):
     RaceContext.serverconfig.set_item(data['section'], data['key'], data['value'])
+    if data['section'] == 'GENERAL' and data['key'] == 'ADMIN_SOCKET_AUTH':
+        global ADMIN_SOCKET_AUTH_ENABLED
+        ADMIN_SOCKET_AUTH_ENABLED = data['value']
     Events.trigger(Evt.CONFIG_SET, {
         'section': data['section'],
         'key': data['key'],
