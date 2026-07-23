@@ -1923,6 +1923,11 @@ def on_restart_server():
                 ), True, caller='shutdown')
     gevent.spawn(SOCKET_IO.stop)  # shut down flask http server
 
+@SOCKET_IO.on('cancel_restart_required')
+def on_cancel_restart_required():
+    '''Cancels the pending-restart-required condition.'''
+    RaceContext.serverstate.clear_restart_required()
+
 @SOCKET_IO.on('kill_server')
 @catchLogExceptionsWrapper
 def on_kill_server(*args):

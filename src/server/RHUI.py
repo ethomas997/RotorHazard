@@ -2069,6 +2069,10 @@ class RHUI():
         ''' Emits restart required message to all clients '''
         self._socket.emit('restart_required')
 
+    def emit_restart_not_required(self, **params):
+        ''' Emits restart-not-required message to all clients '''
+        self._socket.emit('restart_not_required')
+
     def emit_refresh_page(self, **params):
         ''' Emits refresh-page message '''
         self._socket.emit('refresh_page')
