@@ -144,13 +144,13 @@
 		$('#voice_race_leader').val(rotorhazard.voice_race_leader);
 		$().articulate('volume', rotorhazard.voice_volume);
 		$('#set_voice_volume').val(volume_logsl.position(rotorhazard.voice_volume));
-		$('#voice_volume_value').html($('#set_voice_volume').val());
+		rhui.updateRangeValue($('#set_voice_volume'));
 		$().articulate('rate', rotorhazard.voice_rate);
-		$('#voice_rate_value').html(rotorhazard.voice_rate.toFixed(2));
 		$('#set_voice_rate').val(rotorhazard.voice_rate);
+		rhui.updateRangeValue($('#set_voice_rate'));
 		$().articulate('pitch', rotorhazard.voice_pitch);
-		$('#voice_pitch_value').html(rotorhazard.voice_pitch.toFixed(2));
 		$('#set_voice_pitch').val(rotorhazard.voice_pitch);
+		rhui.updateRangeValue($('#set_voice_pitch'));
 		$('#display_lap_id').prop("checked", rotorhazard.display_lap_id);
 		$('#display_time_start').prop("checked", rotorhazard.display_time_start);
 		$('#display_time_first_pass').prop("checked", rotorhazard.display_time_first_pass);
@@ -696,7 +696,6 @@
 		$('#set_voice_volume').on('input', function (event) {
 			var val = volume_logsl.value($(this).val());
 			$().articulate('volume', val);
-			$('#voice_volume_value').html($(this).val());
 		});
 
 		$('#set_voice_volume').change(function (event) {
@@ -708,7 +707,6 @@
 		$('#set_voice_rate').on('input', function (event) {
 			val = parseFloat($(this).val())
 			$().articulate('rate', val);
-			$('#voice_rate_value').html(val.toFixed(2));
 		});
 
 		$('#set_voice_rate').on('change', function (event) {
@@ -719,7 +717,6 @@
 		$('#set_voice_pitch').on('input', function (event) {
 			val = parseFloat($(this).val())
 			$().articulate('pitch', val);
-			$('#voice_pitch_value').html(val.toFixed(2));
 		});
 
 		$('#set_voice_pitch').on('change', function (event) {
@@ -988,23 +985,29 @@
 			<li>
 				<div class="label-block">
 					<label for="set_voice_volume">{{ __('Voice Volume') }}</label>
-					<p class="desc">{{ __('Volume') }}: <span id="voice_volume_value"></span></p>
 				</div>
-				<input type="range" id="set_voice_volume" min="0" max="100">
+				<div class="uifield-range">
+					<input type="range" id="set_voice_volume" min="0" max="100" data-value-suffix="%">
+					<output class="uifield-range-value" id="voice_volume_value" for="set_voice_volume"></output>
+				</div>
 			</li>
 			<li>
 				<div class="label-block">
 					<label for="set_voice_rate">{{ __('Voice Rate') }}</label>
-					<p class="desc">{{ __('Rate') }}: <span id="voice_rate_value"></span></p>
 				</div>
-				<input type="range" id="set_voice_rate" min="0" max="2.0" step="0.01">
+				<div class="uifield-range">
+					<input type="range" id="set_voice_rate" min="0" max="2.0" step="0.01" data-value-suffix="×" data-value-decimals="2">
+					<output class="uifield-range-value" id="voice_rate_value" for="set_voice_rate"></output>
+				</div>
 			</li>
 			<li>
 				<div class="label-block">
 					<label for="set_voice_pitch">{{ __('Voice Pitch') }}</label>
-					<p class="desc">{{ __('Pitch') }}: <span id="voice_pitch_value"></span></p>
 				</div>
-				<input type="range" id="set_voice_pitch" min="0" max="2.0" step="0.01">
+				<div class="uifield-range">
+					<input type="range" id="set_voice_pitch" min="0" max="2.0" step="0.01" data-value-suffix="×" data-value-decimals="2">
+					<output class="uifield-range-value" id="voice_pitch_value" for="set_voice_pitch"></output>
+				</div>
 			</li>
 			<li>
 				<div class="label-block">
