@@ -2815,6 +2815,7 @@ class RHData():
             for attr in self.get_raceformat_attributes(format_id):
                 Database.DB_session.delete(attr)
 
+            Database.DB_session.flush()
             Database.DB_session.delete(race_format)
             self.commit()
 
