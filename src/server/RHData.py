@@ -2150,10 +2150,13 @@ class RHData():
             for attr in self.get_raceclass_attributes(raceClass_or_id):
                 Database.DB_session.delete(attr)
 
-            Database.DB_session.delete(race_class)
             for heat in Database.Heat.query.all():
                 if heat.class_id == race_class.id:
                     heat.class_id = RHUtils.CLASS_ID_NONE
+
+            Database.DB_session.flush()
+
+            Database.DB_session.delete(race_class)
 
             self.commit()
 
