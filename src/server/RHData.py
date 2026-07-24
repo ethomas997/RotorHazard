@@ -1265,6 +1265,11 @@ class RHData():
                 )
             Database.DB_session.add(new_heatnode)
 
+        # copy attributes to duplicated heat
+        for attr in self.get_heat_attributes(source_heat):
+          Database.DB_session.add(Database.HeatAttribute(id=new_heat.id, name=attr.name, value=attr.value))
+
+				# run filters
         new_heat = self._filters.run_filters(Flt.HEAT_DUPLICATE, new_heat, {
             'source': source_heat.id
         })
@@ -2007,9 +2012,15 @@ class RHData():
         Database.DB_session.flush()
         Database.DB_session.refresh(new_class)
 
+        # copy attributes to duplicated raceclass
+        for attr in self.get_raceclass_attributes(source_class):
+          Database.DB_session.add(Database.RaceClassAttribute(id=new_class.id, name=attr.name, value=attr.value))
+
+				# duplicate heats
         for heat in Database.Heat.query.filter_by(class_id=source_class.id).all():
             self.duplicate_heat(heat, dest_class=new_class.id)
 
+				# run filters
         new_class = self._filters.run_filters(Flt.CLASS_DUPLICATE, new_class, {
             'source': source_class.id
         })
