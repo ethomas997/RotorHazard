@@ -22,6 +22,7 @@ from RHUtils import catchLogExceptionsWrapper
 from Database import ProgramMethod, RoundType
 from RHRace import RacingMode, RaceStatus
 from filtermanager import Flt
+import AdminAuth
 import logging
 
 logger = logging.getLogger(__name__)
@@ -344,7 +345,15 @@ class RHUI():
         self._app.register_blueprint(blueprint)
 
     # Socket generics
-    def socket_listen(self, message, handler):
+    def socket_listen(self, message, handler, requires_auth=False):
+        '''Registers a SocketIO event handler.
+
+        :param requires_auth: If True, the handler is guarded by the same
+        admin-authentication check used for the server's own
+        destructive/config-mutating SocketIO handlers.
+        '''
+        if requires_auth:
+            handler = AdminAuth.make_socketio_auth_guard(self._racecontext)(handler)
         self._socket.on_event(message, handler)
 
     def socket_send(self, message, data):

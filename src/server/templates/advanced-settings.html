@@ -234,6 +234,15 @@
 				</div>
 				<input type="text" id="set-cors-hosts" class="set-config" data-section="GENERAL" data-key="CORS_ALLOWED_HOSTS" value="{{ getConfig('GENERAL', 'CORS_ALLOWED_HOSTS') }}">
 			</li>
+			<li>
+				<div class="label-block">
+					<label for="set-admin-socket-auth">{{ __('Admin Socket Auth') }}</label>
+				</div>
+				<select id="set-admin-socket-auth" class="set-config" data-section="GENERAL" data-key="ADMIN_SOCKET_AUTH" data-type="boolean">
+					<option value="true" {{'selected' if getConfig('GENERAL', 'ADMIN_SOCKET_AUTH')==true}}>{{ __('Enabled') }}</option>
+					<option value="false" {{'selected' if getConfig('GENERAL', 'ADMIN_SOCKET_AUTH')==false}}>{{ __('Disabled') }}</option>
+				</select>
+			</li>
 		</ol>
 	</div>
 </div>

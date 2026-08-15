@@ -246,10 +246,11 @@ Send a message which appears as a pop-up alert.
 
 ### Sockets
 
-#### ui.socket_listen(message, handler)
+#### ui.socket_listen(message, handler, requires_auth=False)
 Calls function when a socket event is received.
 - `message` (string): Socket event name
 - `handler` (callable): Function to call
+- `requires_auth` (boolean): if True, `handler` is only invoked for clients that have passed the server's admin authentication (the same check used by the server's own destructive/config-mutating socket handlers)
 
 `handler` is passed socket data as an argument.
 
