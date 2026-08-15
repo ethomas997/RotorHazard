@@ -65,7 +65,7 @@ import signal
 import werkzeug
 import urllib3
 
-from flask import Flask, send_from_directory, request, make_response, Response, templating, redirect, abort, copy_current_request_context, session
+from flask import Flask, send_from_directory, request, make_response, Response, templating, redirect, abort, copy_current_request_context
 from flask.blueprints import Blueprint
 from flask_socketio import SocketIO, emit
 
@@ -171,6 +171,7 @@ import EventActions
 import RaceContext
 import RHData
 import RHUI
+import AdminAuth
 import calibration
 import heat_automation
 import RHAPI
@@ -232,7 +233,6 @@ Server_ipaddress_str = None
 ShutdownButtonInputHandler = None
 Server_secondary_mode = None
 HardwareHelpers = {}
-Auth_succeeded_flag = False
 
 SERVER_PROCESS_RESTART_FLAG = False
 HEARTBEAT_THREAD = None
@@ -240,7 +240,7 @@ BACKGROUND_THREADS_ENABLED = True
 HEARTBEAT_DATA_RATE_FACTOR = 5
 
 # cached copy of GENERAL/ADMIN_SOCKET_AUTH; kept in sync by 'on_set_config'
-ADMIN_SOCKET_AUTH_ENABLED = RaceContext.serverconfig.get_item('GENERAL', 'ADMIN_SOCKET_AUTH')
+AdminAuth.set_admin_socket_auth_enabled(RaceContext.serverconfig.get_item('GENERAL', 'ADMIN_SOCKET_AUTH'))
 
 ERROR_REPORT_INTERVAL_SECS = 600  # delay between comm-error reports to log
 
@@ -304,7 +304,7 @@ def log_error_callback_fn(*args):
         RaceContext.rhui.set_ui_message("errors-logged",\
                    f'{__("Error messages have been logged.")} (<a href=\"/hardwarelog?log_level=ERROR\">{__("View error log")}</a>)',\
                    header="Notice", subclass="errors-logged")
-        if Auth_succeeded_flag:
+        if AdminAuth.Auth_succeeded_flag:
             SOCKET_IO.emit('update_server_messages', RaceContext.rhui.get_ui_server_messages_str())
     if check_log_error_alert():  # show alert popup if not previously shown
         log.set_log_level_callback(logging.NOTSET)  # if popup shown then clear callback function
@@ -386,7 +386,7 @@ def getFwfileProctypeStr(fileStr):
 
 # Shows an alert popup if error messages have been logged and popup was not previously shown
 def check_log_error_alert():
-    if Auth_succeeded_flag and log.get_log_error_alert_flag():
+    if AdminAuth.Auth_succeeded_flag and log.get_log_error_alert_flag():
         gevent.spawn_later(1.0, RaceContext.rhui.emit_priority_message,\
                 f'{__("An error has occurred.")}<br /><a href="/hardwarelog?log_level=ERROR">{__("View error log")}</a>',\
                 True, False, True)  # admin_only=True
@@ -396,28 +396,9 @@ def check_log_error_alert():
 #
 # Authentication
 #
-
-def check_auth(auth):
-    '''Check if a username password combination is valid.'''
-    global Auth_succeeded_flag
-    # allow open access if both ADMIN fields set to empty string:
-    if not RaceContext.serverconfig.get_item('SECRETS', 'ADMIN_USERNAME') and \
-        not RaceContext.serverconfig.get_item('SECRETS', 'ADMIN_PASSWORD'):
-        Auth_succeeded_flag = True
-        return True
-
-    # allow open access if no config has been set:
-    if RaceContext.serverconfig.config_file_status == 0:
-        Auth_succeeded_flag = True
-        return True
-
-    # allow access if user/password match
-    if auth and auth.username and auth.password:
-        if (auth.username == RaceContext.serverconfig.get_item('SECRETS', 'ADMIN_USERNAME') and \
-                auth.password == RaceContext.serverconfig.get_item('SECRETS', 'ADMIN_PASSWORD')):
-            Auth_succeeded_flag = True
-            return True
-    return False
+# check_auth() and the SocketIO auth guard live in AdminAuth.py so RHUI.py
+# can reuse them for plugin-registered handlers (RHAPI.socket_listen)
+# without a circular import back to this module.
 
 def authenticate():
     '''Sends a 401 response that enables basic auth.'''
@@ -429,51 +410,12 @@ def authenticate():
 def requires_auth(f):
     @functools.wraps(f)
     def decorated_auth(*args, **kwargs):
-        if not check_auth(request.authorization):
+        if not AdminAuth.check_auth(RaceContext, request.authorization):
             return authenticate()
         return f(*args, **kwargs)
     return decorated_auth
 
-def requires_socketio_auth(f):
-    '''Guards administrative/destructive SocketIO event handlers.
-    Unlike @requires_auth, this cannot return an HTTP 401 (there is no
-    HTTP response to send back over an established SocketIO connection),
-    so it just logs and drops the event instead of invoking the handler.
-    Several of these handler functions are also called directly (as plain
-    Python calls, not via a dispatched SocketIO event) from server startup
-    and background-thread code, which has no Flask request context. In
-    that case `request.authorization` raises RuntimeError; treat that as
-    a trusted internal call and let it through unchecked.
-    A successful check is cached in the SocketIO connection's own session
-    (separate from the browser's HTTP cookie session; reset on
-    disconnect/reload) so later events on the same connection don't
-    re-validate the Basic Auth header. That header is a fixed pair cached
-    by the browser and can't be refreshed mid-connection, so if admin
-    credentials are changed via one guarded event, live-rechecking every
-    subsequent event against the new credentials would reject the
-    browser's now-stale header and lock the page out for the rest of
-    that connection.
-    Can be turned off via the 'Admin Socket Auth' setting (Advanced
-    Settings | HTTP Server), which sets GENERAL/ADMIN_SOCKET_AUTH to False.
-    '''
-    @functools.wraps(f)
-    def decorated_auth(*args, **kwargs):
-        if not ADMIN_SOCKET_AUTH_ENABLED:
-            return f(*args, **kwargs)
-        try:
-            auth = request.authorization
-        except RuntimeError:
-            return f(*args, **kwargs)
-        if session.get('socketio_admin_auth'):
-            return f(*args, **kwargs)
-        if not check_auth(auth):
-            logger.warning("Rejected unauthenticated SocketIO event '%s' from %s",
-                            f.__name__, request.remote_addr)
-            RaceContext.rhui.emit_priority_message(__('Action requires authentication.'), False, nobroadcast=True)
-            return
-        session['socketio_admin_auth'] = True
-        return f(*args, **kwargs)
-    return decorated_auth
+requires_socketio_auth = AdminAuth.make_socketio_auth_guard(RaceContext)
 
 # Flask template render with exception catch, so exception
 # details are sent to the log file (instead of 'stderr').
@@ -2743,8 +2685,7 @@ def on_set_option(data):
 def on_set_config(data):
     RaceContext.serverconfig.set_item(data['section'], data['key'], data['value'])
     if data['section'] == 'GENERAL' and data['key'] == 'ADMIN_SOCKET_AUTH':
-        global ADMIN_SOCKET_AUTH_ENABLED
-        ADMIN_SOCKET_AUTH_ENABLED = data['value']
+        AdminAuth.set_admin_socket_auth_enabled(data['value'])
     Events.trigger(Evt.CONFIG_SET, {
         'section': data['section'],
         'key': data['key'],

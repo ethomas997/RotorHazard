@@ -3,7 +3,7 @@ import functools
 from Database import LapSource
 
 API_VERSION_MAJOR = 1
-API_VERSION_MINOR = 4
+API_VERSION_MINOR = 5
 
 import dataclasses
 import json
@@ -101,8 +101,8 @@ class UserInterfaceAPI():
         self._racecontext.rhui.emit_clear_priority_messages()
 
     # Socket
-    def socket_listen(self, message, handler):
-        self._racecontext.rhui.socket_listen(message, handler)
+    def socket_listen(self, message, handler, requires_auth=False):
+        self._racecontext.rhui.socket_listen(message, handler, requires_auth)
 
     def socket_send(self, message, data):
         self._racecontext.rhui.socket_send(message, data)
