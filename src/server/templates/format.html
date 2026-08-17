@@ -688,6 +688,24 @@
 						var field = $(document.createElement('div'))
 							.prop('id', `attributes--race-class-${race_class.id}`)
 							.addClass('attrs');
+
+							// Attributes
+							for (var attr_idx in rotorhazard.event.raceclass_attributes) {
+								var raceclass_attr = { ...rotorhazard.event.raceclass_attributes[attr_idx]};
+								raceclass_attr.fieldClass = 'set_raceclass_attr';
+								raceclass_attr.wrapperClass = 'custom_attr';
+								raceclass_attr.id = 'raceclassAttr_' + raceclass_attr.name + '_' + race_class.id;
+								raceclass_attr.data = {
+									'raceclass_id': race_class.id,
+									'attr': raceclass_attr.name,
+								}
+
+								if (raceclass_attr.name in race_class) {
+									raceclass_attr.value = race_class[raceclass_attr.name]
+								}
+
+								field.append(rhui.buildField(raceclass_attr));
+							}
 						el.append(field);
 
 						// Heat List
@@ -890,19 +908,12 @@
 					var attrgroup_el = $(`#attributes--race-class-${race_class.id}`);
 					for (var attr_idx in rotorhazard.event.raceclass_attributes) {
 						var raceclass_attr = { ...rotorhazard.event.raceclass_attributes[attr_idx]};
-						raceclass_attr.fieldClass = 'set_raceclass_attr';
-						raceclass_attr.wrapperClass = 'custom_attr';
-						raceclass_attr.id = 'raceclassAttr_' + raceclass_attr.name + '_' + race_class.id;
-						raceclass_attr.data = {
-							'raceclass_id': race_class.id,
-							'attr': raceclass_attr.name,
-						}
 
-						if (raceclass_attr.name in race_class) {
-							raceclass_attr.value = race_class[raceclass_attr.name]
-						}
+						var attrfield_el = $(`#raceclassAttr_${raceclass_attr.name}_${race_class.id}`);
 
-						attrgroup_el.html(rhui.buildField(raceclass_attr));
+						raceclass_attr.value = race_class[raceclass_attr.name];
+
+						rhui.updateField(raceclass_attr, attrfield_el);
 					}
 
 					// Heat List
@@ -1632,7 +1643,7 @@
 					.text(__('Seed Now'))
 					.appendTo(heat_controls);
 
-				// Custom Attributes ***
+				// Custom Attributes
 				for (var attr_idx in rotorhazard.event.heat_attributes) {
 					var attr = { ...rotorhazard.event.heat_attributes[attr_idx]};
 					attr.wrapperClass = 'custom_attr';
@@ -1977,7 +1988,7 @@
 
 			// Dynamic Controls
 
-			// Custom Attributes ***
+			// Custom Attributes
 			for (var attr_idx in rotorhazard.event.heat_attributes) {
 				var attr = { ...rotorhazard.event.heat_attributes[attr_idx]};
 				var attr_el = el.find(`.heat-ui--attr-${attr.name}--heat-${heat.id}`);
