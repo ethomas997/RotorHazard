@@ -73,6 +73,7 @@ class Config:
         self.config['GENERAL']['SECONDARY_TIMEOUT'] = 300  # seconds
         self.config['GENERAL']['DEBUG'] = False
         self.config['GENERAL']['CORS_ALLOWED_HOSTS'] = '*'
+        self.config['GENERAL']['ADMIN_SOCKET_AUTH'] = True
         self.config['GENERAL']['FORCE_S32_BPILL_FLAG'] = False
         self.config['GENERAL']['DEF_NODE_FWUPDATE_URL'] = ''
         self.config['GENERAL']['SHUTDOWN_BUTTON_GPIOPIN'] = 18
