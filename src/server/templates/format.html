@@ -695,6 +695,10 @@
 								raceclass_attr.fieldClass = 'set_raceclass_attr';
 								raceclass_attr.wrapperClass = 'custom_attr';
 								raceclass_attr.id = 'raceclassAttr_' + raceclass_attr.name + '_' + race_class.id;
+								raceclass_attr.data = {
+									'raceclass_id': race_class.id,
+									'attr': raceclass_attr.name,
+								}
 
 								if (raceclass_attr.name in race_class) {
 									raceclass_attr.value = race_class[raceclass_attr.name]
