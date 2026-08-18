@@ -164,7 +164,9 @@
 
 		socket.on('admin_creds_defaulted', function (msg) {
 			$('#set_admin_user').val(msg.username);
-			$('#set_admin_password').val(msg.password);
+			// route through the show/hide helper so the field does not end up holding
+			//  the real password while still displaying as masked
+			set_admin_password_shown(true, msg.password);
 		});
 
 		socket.on('ui', function (msg) {
