@@ -1410,6 +1410,37 @@
 			}
 		});
 
+		// Show/hide the admin password. It is not rendered into this page; it is
+		//  fetched on demand so it only crosses the wire when reveal is used.
+		var admin_password_shown = false;
+
+		$('#show_admin_password').html(svg_asset.eye_visible);
+
+		function set_admin_password_shown(shown, password) {
+			admin_password_shown = shown;
+			$('#set_admin_password')
+				.attr('type', shown ? 'text' : 'password')
+				.val(shown ? password : '**********');
+			var label = shown ? __('Hide password') : __('Show password');
+			$('#show_admin_password')
+				.html(shown ? svg_asset.eye_invisible : svg_asset.eye_visible)
+				.attr('aria-pressed', shown ? 'true' : 'false')
+				.attr('aria-label', label)
+				.attr('title', label);
+		}
+
+		$(document).on('click', '#show_admin_password', function (event) {
+			if (admin_password_shown) {
+				set_admin_password_shown(false);
+			} else {
+				socket.emit('get_admin_password');
+			}
+		});
+
+		socket.on('admin_password', function (msg) {
+			set_admin_password_shown(true, msg.password);
+		});
+
 		$(document).on('change', '.set-config', function (event) {
 			value = $(this).val();
 			if ($(this).data('type') == 'boolean' ) {
@@ -3179,7 +3210,10 @@
 					<label for="set_admin_password">{{ __('Password') }}</label>
 					<p class="desc">{{ __('Default') }}: rotorhazard</p>
 				</div>
-				<input type="password" id="set_admin_password" class="set-config" data-section="SECRETS" data-key="ADMIN_PASSWORD" value="**********">
+				<div class="input-with-icon">
+					<input type="password" id="set_admin_password" class="set-config" data-section="SECRETS" data-key="ADMIN_PASSWORD" value="**********">
+					<button type="button" id="show_admin_password" class="no-style eye-icon" aria-pressed="false" aria-label="{{ __('Show password') }}" title="{{ __('Show password') }}"></button>
+				</div>
 			</li>
 			<li>
 				<div class="label-block">

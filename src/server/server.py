@@ -448,6 +448,9 @@ def requires_auth(f):
     return decorated_auth
 
 requires_socketio_auth = AdminAuth.make_socketio_auth_guard(RaceContext)
+# stricter guard for handlers that disclose a stored credential; not bypassable
+#  via the 'Admin Socket Auth' setting
+requires_socketio_credential_auth = AdminAuth.make_socketio_credential_guard(RaceContext)
 
 # Flask template render with exception catch, so exception
 # details are sent to the log file (instead of 'stderr').
@@ -2729,6 +2732,19 @@ def on_set_config(data):
         'key': data['key'],
         'value': data['value'],
         })
+
+@SOCKET_IO.on('get_admin_password')
+@requires_socketio_credential_auth
+@catchLogExceptionsWrapper
+def on_get_admin_password():
+    '''Sends the stored admin password to the requesting client only.
+    Used by the Settings page 'show password' control, so the value is sent only when
+    asked for rather than rendered into the page. The bare 'emit()' replies to the
+    requesting SocketIO session alone; do not change it to a broadcast. No event is
+    triggered, to keep the value out of the event log.
+    '''
+    emit('admin_password',
+         {'password': RaceContext.serverconfig.get_item('SECRETS', 'ADMIN_PASSWORD')})
 
 @SOCKET_IO.on('set_config_section')
 @requires_socketio_auth
