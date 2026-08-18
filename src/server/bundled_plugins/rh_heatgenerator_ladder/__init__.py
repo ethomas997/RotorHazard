@@ -3,11 +3,17 @@
 import logging
 import RHUtils
 import random
+import itertools
 from eventmanager import Evt
 from HeatGenerator import HeatGenerator, HeatPlan, HeatPlanSlot, SeedMethod
 from RHUI import UIField, UIFieldType, UIFieldSelectOption
 
 logger = logging.getLogger(__name__)
+
+def letter_generator(letters):
+    for size in itertools.count(1):
+        for s in itertools.product(list(letters), repeat=size):
+            yield "".join(s)
 
 def getTotalPilots(rhapi, generate_args):
     input_class_id = generate_args.get('input_class')
@@ -58,8 +64,8 @@ def generateLadder(rhapi, generate_args=None):
         logger.warning("Unable to seed ladder: no pilots available")
         return False
 
-    letters = rhapi.__('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
     heats = []
+    heat_letter = letter_generator(rhapi.__('ABCDEFGHIJKLMNOPQRSTUVWXYZ'))
 
     if 'seed_offset' in generate_args:
         seed_offset = max(int(generate_args['seed_offset']) - 1, 0)
@@ -72,7 +78,7 @@ def generateLadder(rhapi, generate_args=None):
     while len(unseeded_pilots):
         if heat_pilots == 0:
             heat = HeatPlan(
-                letters[len(heats)] + ' ' + suffix,
+                next(heat_letter) + ' ' + suffix,
                 []
             )
 
@@ -125,17 +131,11 @@ def generateBalancedHeats(rhapi, generate_args=None):
     if total_pilots % qualifiers_per_heat:
         total_heats += 1
 
-    letters = rhapi.__('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+    heat_letter = letter_generator(rhapi.__('ABCDEFGHIJKLMNOPQRSTUVWXYZ'))
     heats = []
-
+    
     for idx in range(total_heats):
-        if idx < len(letters):
-            designator = letters[idx]
-        else:
-            n = idx // len(letters)
-            designator = f"{n}{letters[idx % len(letters)]}"
-
-        heats.append(HeatPlan(designator + ' ' + suffix, []))
+        heats.append(HeatPlan(next(heat_letter) + ' ' + suffix, []))
 
     if 'seed_offset' in generate_args:
         seed_offset = max(int(generate_args['seed_offset']) - 1, 0)
