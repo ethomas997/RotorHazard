@@ -25,7 +25,7 @@ def set_admin_socket_auth_enabled(enabled):
 def check_auth(racecontext, auth):
     '''Check if a username password combination is valid.'''
     global Auth_succeeded_flag
-    # allow open access if both ADMIN fields set to empty string:
+    # allow open access if both ADMIN fields set to empty string
     if not racecontext.serverconfig.get_item('SECRETS', 'ADMIN_USERNAME') and \
         not racecontext.serverconfig.get_item('SECRETS', 'ADMIN_PASSWORD'):
         Auth_succeeded_flag = True

@@ -400,6 +400,38 @@ def check_log_error_alert():
 # can reuse them for plugin-registered handlers (RHAPI.socket_listen)
 # without a circular import back to this module.
 
+def check_default_admin_creds_warning():
+    '''Sets/clears the admin-page warning for unchanged default admin credentials.'''
+    username = RaceContext.serverconfig.get_item('SECRETS', 'ADMIN_USERNAME')
+    password = RaceContext.serverconfig.get_item('SECRETS', 'ADMIN_PASSWORD')
+    if username == 'admin' and password == 'rotorhazard':
+        RaceContext.rhui.set_ui_message('default-admin-creds',
+            __('Admin username/password are still set to their default values; change them below'),
+            header='Warning', subclass='default-admin-creds')
+    else:
+        RaceContext.rhui.clear_ui_message('default-admin-creds')
+    SOCKET_IO.emit('update_server_messages', RaceContext.rhui.get_ui_server_messages_str())
+
+def apply_default_admin_creds_if_blank():
+    '''If admin credentials are blank, set them to the default values.
+    Called when Server Debug Mode is being turned off, since blank
+    credentials are only a valid "no auth" setting while debug mode is
+    on. Without this, disabling debug mode with blank credentials would
+    lock out all admin access with no way back in through the web UI.
+    '''
+    if not RaceContext.serverconfig.get_item('SECRETS', 'ADMIN_USERNAME') and \
+            not RaceContext.serverconfig.get_item('SECRETS', 'ADMIN_PASSWORD'):
+        RaceContext.serverconfig.set_item('SECRETS', 'ADMIN_USERNAME', 'admin')
+        RaceContext.serverconfig.set_item('SECRETS', 'ADMIN_PASSWORD', 'rotorhazard')
+        RaceContext.rhui.emit_priority_message(
+            __('Blank admin credentials are only allowed in Server Debug Mode; '
+               'username/password have been set to their default values'),
+            False, nobroadcast=True)
+        SOCKET_IO.emit('admin_creds_defaulted', {
+            'username': 'admin',
+            'password': 'rotorhazard',
+            })
+
 def authenticate():
     '''Sends a 401 response that enables basic auth.'''
     return Response(
@@ -2686,6 +2718,12 @@ def on_set_config(data):
     RaceContext.serverconfig.set_item(data['section'], data['key'], data['value'])
     if data['section'] == 'GENERAL' and data['key'] == 'ADMIN_SOCKET_AUTH':
         AdminAuth.set_admin_socket_auth_enabled(data['value'])
+    if data['section'] == 'GENERAL' and data['key'] == 'DEBUG' and data['value'] is False:
+        apply_default_admin_creds_if_blank()
+    elif data['section'] == 'SECRETS' and not RaceContext.serverconfig.get_item('GENERAL', 'DEBUG'):
+        apply_default_admin_creds_if_blank()
+    if data['section'] in ('SECRETS', 'GENERAL'):
+        check_default_admin_creds_warning()
     Events.trigger(Evt.CONFIG_SET, {
         'section': data['section'],
         'key': data['key'],
@@ -2697,6 +2735,12 @@ def on_set_config(data):
 @catchLogExceptionsWrapper
 def on_set_config_section(data):
     RaceContext.serverconfig.set_section(data['section'], data['value'])
+    if data['section'] == 'GENERAL' and data['value'].get('DEBUG') is False:
+        apply_default_admin_creds_if_blank()
+    elif data['section'] == 'SECRETS' and not RaceContext.serverconfig.get_item('GENERAL', 'DEBUG'):
+        apply_default_admin_creds_if_blank()
+    if data['section'] in ('SECRETS', 'GENERAL'):
+        check_default_admin_creds_warning()
     Events.trigger(Evt.CONFIG_SET, {
         'section': data['section'],
         'value': data['value'],
@@ -3693,6 +3737,7 @@ def start(port_val=RaceContext.serverconfig.get_item('GENERAL', 'HTTP_PORT'), ar
             RaceContext.serverconfig.set_item('SECRETS', 'SECRET_KEY', new_key)
 
         APP.config['SECRET_KEY'] = RaceContext.serverconfig.get_item('SECRETS', 'SECRET_KEY')
+        check_default_admin_creds_warning()
         logger.info("Running http server at port " + str(port_val))
         init_interface_state(startup=True)
         Events.trigger(Evt.STARTUP, {
