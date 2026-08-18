@@ -68,17 +68,17 @@ class RHData():
 
             found_binary_result = False
             for heat in Database.Heat.query.all():
-                if not isinstance(heat.results, str) and not isinstance(heat.results, dict):
+                if heat.results is not None and not isinstance(heat.results, str) and not isinstance(heat.results, dict):
                     found_binary_result = True
                     break
             if not found_binary_result:
                 for race_class in Database.RaceClass.query.all():
-                    if not isinstance(race_class.results, str) and not isinstance(heat.results, dict):
+                    if race_class.results is not None and not isinstance(race_class.results, str) and not isinstance(race_class.results, dict):
                         found_binary_result = True
                         break
             if not found_binary_result:
                 for race in Database.SavedRaceMeta.query.all():
-                    if not isinstance(race.results, str) and not isinstance(heat.results, dict):
+                    if race.results is not None and not isinstance(race.results, str) and not isinstance(race.results, dict):
                         found_binary_result = True
                         break
 
