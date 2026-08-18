@@ -1214,10 +1214,7 @@ class RHData():
 
         return new_heat
 
-    def duplicate_heat(self, source_heat_or_id, **kwargs):
-        # Add new heat by duplicating an existing one
-        source_heat = self.resolve_heat_from_heat_or_id(source_heat_or_id)
-
+    def copy_to_new_heat_obj(self, source_heat, **kwargs):
         if 'new_heat_name' in kwargs:
             new_heat_name = kwargs['new_heat_name']
         elif source_heat.name:
@@ -1236,18 +1233,46 @@ class RHData():
         else:
             new_group = source_heat.group_id
 
-        new_heat = Database.Heat(
-            name=new_heat_name,
-            class_id=new_class,
-            group_id=new_group,
-            results=None,
-            _cache_status=json.dumps({
-                'data_ver': monotonic(),
-                'build_ver': None
-            }),
-            status=0,
-            auto_frequency=source_heat.auto_frequency
+        if 'new_id' not in kwargs:    # this version is used by 'duplicate_heat()'
+            new_heat = Database.Heat(
+                name=new_heat_name,
+                class_id=new_class,
+                group_id=new_group,
+                results=None,
+                _cache_status=json.dumps({
+                    'data_ver': monotonic(),
+                    'build_ver': None
+                }),
+                status=0,
+                auto_frequency=source_heat.auto_frequency
             )
+
+        else:  # this version is used by 'delete_heat()' when renumbering the last heat to 1
+            new_heat = Database.Heat(
+                id=kwargs['new_id'],
+                name=new_heat_name,
+                class_id=new_class,
+                group_id=new_group,
+                results=None,
+                _cache_status=json.dumps({
+                    'data_ver': monotonic(),
+                    'build_ver': None
+                }),
+                status=source_heat.status,
+                auto_frequency=source_heat.auto_frequency,
+                order=source_heat.order,
+                auto_name=source_heat.auto_name,
+                active=source_heat.active,
+                coop_best_time=source_heat.coop_best_time,
+                coop_num_laps=source_heat.coop_num_laps
+            )
+
+        return new_heat
+
+    def duplicate_heat(self, source_heat_or_id, **kwargs):
+        # Add new heat by duplicating an existing one
+        source_heat = self.resolve_heat_from_heat_or_id(source_heat_or_id)
+        new_heat = self.copy_to_new_heat_obj(source_heat, **kwargs)
 
         Database.DB_session.add(new_heat)
         Database.DB_session.flush()
@@ -1479,30 +1504,44 @@ class RHData():
                     'heat_id': deleted_heat_id,
                     })
 
-                # if only one heat remaining then set ID to 1
-                if heat_count == 2 and self._racecontext.race.race_status == RaceStatus.READY:
+                # if no races have been saved and only one heat remains (unclassified,
+                #  and not already ID 1) then set its ID to 1
+                if heat_count == 2 and self._racecontext.race.race_status == RaceStatus.READY \
+                        and not self.savedRaceMetas_has_any():
                     try:
                         heat = Database.Heat.query.first()
-                        if heat.id != 1:
+                        if heat.id != 1 and heat.class_id == RHUtils.CLASS_ID_NONE:
                             heatnodes = Database.HeatNode.query.filter_by(heat_id=heat.id).order_by(Database.HeatNode.node_index).all()
                             heat_attributes = Database.HeatAttribute.query.filter_by(id=heat.id).all()
 
-                            if not self.savedRaceMetas_has_heat(heat.id):
-                                logger.info("Adjusting single remaining heat ({0}) to ID 1".format(heat.id))
-                                heat.id = 1
-                                for heatnode in heatnodes:
-                                    heatnode.heat_id = heat.id
+                            logger.info("Adjusting single remaining heat ({0}) to ID 1".format(heat.id))
 
-                                for attribute in heat_attributes:
-                                    attribute.id = heat.id
+                            # Insert a new heat row at ID 1, repoint the child rows onto it, then
+                            #  delete the old heat row. Changing 'heat.id' in place would leave
+                            #  the heatnode/heat_attribute rows briefly referencing a heat ID that
+                            #  no longer exists, tripping SQLite's immediate foreign-key checking.
+                            old_heat = heat
+                            kwargs = { "new_heat_name": old_heat.name, "new_id": 1 }
+                            new_heat = self.copy_to_new_heat_obj(old_heat, **kwargs)
 
-                                # self.commit()  # 'set_option()' below will do call to 'commit()'
-                                self._racecontext.race.current_heat = 1
-                                self.set_option('currentHeat', self._racecontext.race.current_heat)
-                            else:
-                                logger.warning("Not changing single remaining heat ID ({0}): is in use".format(heat.id))
+                            Database.DB_session.add(new_heat)
+                            Database.DB_session.flush()
+
+                            for heatnode in heatnodes:
+                                heatnode.heat_id = 1
+                            for attribute in heat_attributes:
+                                attribute.id = 1
+                            Database.DB_session.flush()
+
+                            Database.DB_session.delete(old_heat)
+                            Database.DB_session.flush()
+
+                            # self.commit()  # 'set_option()' below will do call to 'commit()'
+                            self._racecontext.race.current_heat = 1
+                            self.set_option('currentHeat', self._racecontext.race.current_heat)
                     except Exception as ex:
                         logger.warning("Error adjusting single remaining heat ID: " + str(ex))
+                        Database.DB_session.rollback()
 
                 return True
         else:
@@ -3120,6 +3159,9 @@ class RHData():
 
     def savedRaceMetas_has_raceClass(self, class_id):
         return bool(Database.SavedRaceMeta.query.filter_by(class_id=class_id).count())
+
+    def savedRaceMetas_has_any(self):
+        return bool(Database.SavedRaceMeta.query.count())
 
     def alter_savedRaceMeta(self, race_id, data):
         if 'race_attr' in data and 'value' in data:
