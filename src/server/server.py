@@ -427,7 +427,9 @@ def apply_default_admin_creds_if_blank():
             __('Blank admin credentials are only allowed in Server Debug Mode; '
                'username/password have been set to their default values'),
             False, nobroadcast=True)
-        SOCKET_IO.emit('admin_creds_defaulted', {
+        # replies to the admin that triggered this, not a broadcast; do not change
+        #  to 'SOCKET_IO.emit()', which would send the credentials to every client
+        emit('admin_creds_defaulted', {
             'username': 'admin',
             'password': 'rotorhazard',
             })
