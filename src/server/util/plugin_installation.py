@@ -493,7 +493,7 @@ class PluginInstallationManager:
                     [sys.executable, "-m", "pip", "install", *manifest.dependencies],
                     check=True,
                 )
-            except subprocess.CalledProcessError as ex:
+            except subprocess.CalledProcessError as ex:  # pylint: disable=no-member
                 raise PluginInstallationError(
                     "Failed to install dependencies", domain
                 ) from ex
