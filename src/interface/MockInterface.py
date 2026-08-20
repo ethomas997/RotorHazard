@@ -64,7 +64,7 @@ class MockInterface(BaseHardwareInterface):
 
     def start(self):
         if self.update_thread is None:
-            self.log('Starting background thread.')
+            self.log('Starting background thread')
             self.update_thread = gevent.spawn(self.update_loop)
 
     def stop(self):

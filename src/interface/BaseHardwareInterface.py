@@ -49,7 +49,8 @@ class BaseHardwareInterface(object):
         return 1000*monotonic() - self.start_time
 
     def log(self, message):
-        logger.info('Interface: {0}'.format(message))
+        # prefix with class name to distinguish multiple active interfaces
+        logger.info('{0}: {1}'.format(type(self).__name__, message))
 
     def get_lap_source_str(self, source_idx):
         return BaseHardwareInterface.LAP_SOURCE_LABEL_STRS[source_idx] \
