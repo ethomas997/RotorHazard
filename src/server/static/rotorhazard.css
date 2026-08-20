@@ -423,6 +423,15 @@ ol.form li+li {
 		margin-left: 0.5em;
 	}
 
+	ol.form .input-with-icon {
+		flex: 1 1 0;
+		margin-left: 0.5em;
+	}
+
+	ol.form .input-with-icon input {
+		margin-left: 0;
+	}
+
 	ol.form input[type="checkbox"],
 	ol.form input[type="radio"] {
 		width: auto;
@@ -1358,6 +1367,19 @@ main.page-home {
 
 .eye-icon svg {
 	height: 1em;
+}
+
+/* text input paired with a trailing icon button (e.g. show-password) */
+.input-with-icon {
+	display: flex;
+	align-items: center;
+	gap: 0.375em;
+	width: 100%;
+}
+
+.input-with-icon input {
+	flex: 1 1 auto;
+	min-width: 0;
 }
 
 .item-blocks .duplicate {

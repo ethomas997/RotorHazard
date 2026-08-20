@@ -92,3 +92,35 @@ def make_socketio_auth_guard(racecontext):
             return f(*args, **kwargs)
         return decorated_auth
     return requires_socketio_auth
+
+def make_socketio_credential_guard(racecontext):
+    '''Returns a decorator guarding a SocketIO handler that discloses a stored credential.
+    Same check as 'make_socketio_auth_guard()', except the 'Admin Socket Auth' setting does
+    not bypass it (that setting relaxes action authorization, not credential disclosure),
+    and there is no trusted-internal-call passthrough, so a missing request context is
+    refused rather than allowed through.
+    '''
+    def requires_socketio_credential_auth(f):
+        @functools.wraps(f)
+        def decorated_auth(*args, **kwargs):
+            try:
+                auth = request.authorization
+                remote_addr = request.remote_addr
+            except RuntimeError:
+                logger.warning("Refused credential SocketIO event '%s': no request context",
+                               f.__name__)
+                return
+            if not session.get('socketio_admin_auth'):
+                if not check_auth(racecontext, auth):
+                    logger.warning("Rejected unauthenticated credential SocketIO event '%s' from %s",
+                                   f.__name__, remote_addr)
+                    racecontext.rhui.emit_priority_message(
+                        racecontext.language.__('Action requires authentication.'), False, nobroadcast=True)
+                    return
+                # Cache the check on this connection, as the action guard does; the
+                #  Basic Auth header is only sent while SocketIO uses HTTP polling, so
+                #  a valid admin could otherwise be refused after the WebSocket upgrade.
+                session['socketio_admin_auth'] = True
+            return f(*args, **kwargs)
+        return decorated_auth
+    return requires_socketio_credential_auth
