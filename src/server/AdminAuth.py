@@ -37,11 +37,11 @@ def check_auth(racecontext, auth):
         return True
 
     # allow access if user/password match
-    if auth and auth.username and auth.password:
-        if (auth.username == racecontext.serverconfig.get_item('SECRETS', 'ADMIN_USERNAME') and \
-                auth.password == racecontext.serverconfig.get_item('SECRETS', 'ADMIN_PASSWORD')):
-            Auth_succeeded_flag = True
-            return True
+    if auth is not None and \
+            auth.username == racecontext.serverconfig.get_item('SECRETS', 'ADMIN_USERNAME') and \
+            auth.password == racecontext.serverconfig.get_item('SECRETS', 'ADMIN_PASSWORD'):
+        Auth_succeeded_flag = True
+        return True
     return False
 
 def make_socketio_auth_guard(racecontext):
