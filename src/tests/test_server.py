@@ -12,8 +12,17 @@ sys.path.append('../server/plugins')
 sys.path.append('../interface')
 
 os.environ['RH_NODES'] = '8'
+os.environ['RH_DATA_DIR'] = os.path.dirname(os.path.realpath(__file__))
 
 import server
+
+# tests run without admin auth; force this regardless of what 'config.json' holds,
+#  as it is gitignored and is auto-created with default credentials when absent.
+#  Assigned directly rather than via 'set_item()', which would save to disk.
+server.RaceContext.serverconfig.config['SECRETS']['ADMIN_USERNAME'] = ''
+server.RaceContext.serverconfig.config['SECRETS']['ADMIN_PASSWORD'] = ''
+server.RaceContext.serverconfig.config['GENERAL']['DEBUG'] = True
+
 from Node import Node
 from RHUI import UIField, UIFieldType
 
@@ -172,7 +181,8 @@ class ServerTest(unittest.TestCase):
         self.client.emit('load_data', {'load_types': ['class_data']})
         resp = self.get_response('class_data')
         self.assertEqual(resp['classes'][0]['name'], data['class_name'])
-        self.assertEqual(resp['classes'][0]['format'], data['class_format'])
+        # a 'class_format' of 0 means no format and is stored as CLASS_ID_NONE
+        self.assertEqual(resp['classes'][0]['format'], None)
         self.assertEqual(resp['classes'][0]['description'], data['class_description'])
 
     def test_delete_race_class(self):
@@ -198,20 +208,27 @@ class ServerTest(unittest.TestCase):
         self.client.emit('add_pilot')
         self.client.emit('add_heat')
         self.client.emit('add_race_class')
+
+        # use the heat just added and its first slot, rather than assuming ID 1,
+        #  which only matches on a database with no previous test runs in it
+        self.client.emit('load_data', {'load_types': ['heat_data']})
+        heat = self.get_response('heat_data')['heats'][-1]
+
         data = {
-            'heat': 1,
+            'heat': heat['id'],
             'node': 0,
             'pilot': 1,
             'name': 'Test',
             'class': 1,
-            'slot_id': 1
+            'slot_id': heat['slots'][0]['id']
         }
         self.client.emit('alter_heat', data)
         self.client.emit('load_data', {'load_types': ['heat_data']})
         resp = self.get_response('heat_data')
-        self.assertEqual(resp['heats'][0]['slots'][0]['pilot_id'], data['pilot'])
-        self.assertEqual(resp['heats'][0]['name'], data['name'])
-        self.assertEqual(resp['heats'][0]['class_id'], data['class'])
+        altered = next(h for h in resp['heats'] if h['id'] == data['heat'])
+        self.assertEqual(altered['slots'][0]['pilot_id'], data['pilot'])
+        self.assertEqual(altered['name'], data['name'])
+        self.assertEqual(altered['class_id'], data['class'])
 
     def test_delete_heat(self):
         self.client.emit('load_data', {'load_types': ['heat_data']})
@@ -281,7 +298,7 @@ class ServerTest(unittest.TestCase):
 
     def test_api_root(self):
         self.assertEqual(server.RHAPI.API_VERSION_MAJOR, 1)
-        self.assertEqual(server.RHAPI.API_VERSION_MINOR, 4)
+        self.assertEqual(server.RHAPI.API_VERSION_MINOR, 5)
         self.assertEqual(server.RHAPI.__, server.RHAPI.language.__)
 
     def test_ui_api(self):

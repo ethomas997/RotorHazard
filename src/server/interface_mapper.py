@@ -102,6 +102,12 @@ class InterfaceMapper:
         for iface in self._interface_map:
             iface.interface.stop()
 
+    def clear_interfaces(self):
+        # stop and discard any registered interfaces
+        self.stop()
+        self._interface_map = []
+        self._node_map = []
+
     def update_loop(self):
         for iface in self._interface_map:
             iface.interface.update_loop()

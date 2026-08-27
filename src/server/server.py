@@ -3580,6 +3580,7 @@ def _do_init_rh_interface():
         return False
 
 def initialize_rh_interface():
+    RaceContext.interface.clear_interfaces()
     if not _do_init_rh_interface():
         return False
     if RaceContext.race.num_nodes == 0:
