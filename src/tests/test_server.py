@@ -1,18 +1,27 @@
 '''python -m unittest discover'''
 import os
 import sys
+import tempfile
 import unittest
 import gevent
 from datetime import datetime
 from flask.blueprints import Blueprint
 
-sys.path.append('../server')
-sys.path.append('../server/util')
-sys.path.append('../server/plugins')
-sys.path.append('../interface')
+_TESTS_DIR = os.path.dirname(os.path.realpath(__file__))
+_SRC_DIR = os.path.dirname(_TESTS_DIR)
+
+# absolute, as importing 'server' does an os.chdir() to the data dir, which
+#  would leave relative entries pointing somewhere else
+sys.path.append(os.path.join(_SRC_DIR, 'server'))
+sys.path.append(os.path.join(_SRC_DIR, 'server', 'util'))
+sys.path.append(os.path.join(_SRC_DIR, 'server', 'plugins'))
+sys.path.append(os.path.join(_SRC_DIR, 'interface'))
+sys.path.append(_TESTS_DIR)  # keeps the sensor stubs discoverable after the chdir
 
 os.environ['RH_NODES'] = '8'
-os.environ['RH_DATA_DIR'] = os.path.dirname(os.path.realpath(__file__))
+# fresh data dir per run, so a run never inherits a database or config from a
+#  previous run or from the development checkout
+os.environ['RH_DATA_DIR'] = tempfile.mkdtemp(prefix='rh_test_')
 
 import server
 
