@@ -91,7 +91,18 @@ if __name__ == '__main__' and len(sys.argv) > 1 and CMDARG_DATA_DIR in sys.argv:
         print("Usage: python server.py --data {0}".format(CMDARG_DATA_DIR))
         sys.exit(1)
 
-# 2: datapath.ini
+# 2: RH_DATA_DIR environment variable
+if not DATA_DIR:
+    data_path = os.environ.get('RH_DATA_DIR')
+    if data_path:
+        data_path = os.path.expanduser(data_path)
+        if os.path.exists(data_path):
+            DATA_DIR = data_path
+        else:
+            print("Unable to find data location given by RH_DATA_DIR: {0}".format(data_path))
+            sys.exit(1)
+
+# 3: datapath.ini
 if not DATA_DIR:
     try:
         datapath_ini_path_str = os.path.join(PROGRAM_DIR, 'datapath.ini')
@@ -111,25 +122,25 @@ if not DATA_DIR:
         print('Error processing "{}" file: {}'.format(datapath_ini_path_str, ex))
         sys.exit(1)
 
-# 3: ~/rh-data, if exists
+# 4: ~/rh-data, if exists
 if not DATA_DIR:
     data_path = os.path.expanduser("~/rh-data")
     if os.path.isdir(data_path):
         DATA_DIR = data_path
 
-# 4: Implicit run from PROGRAM_DIR
+# 5: Implicit run from PROGRAM_DIR
 # If "config.json" exists in PROGRAM_DIR, use PROGRAM_DIR as data dir and prompt user with a choice:
 if not DATA_DIR:
     if os.path.exists(os.path.join(PROGRAM_DIR, CONFIG_FILE_NAME)):
         DATA_DIR = PROGRAM_DIR
         implicit_program_dir_flag = True
 
-# 5: If CWD contains config use CWD
+# 6: If CWD contains config use CWD
 if not DATA_DIR:
     if os.path.exists(os.path.join(os.getcwd(), CONFIG_FILE_NAME)):
         DATA_DIR = os.getcwd()
 
-# 6: ~/rh-data, creating as needed
+# 7: ~/rh-data, creating as needed
 if not DATA_DIR:
     try:
         os.makedirs(os.path.expanduser("~/rh-data"), exist_ok=True)
