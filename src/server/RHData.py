@@ -3894,6 +3894,8 @@ def getFastestSpeedStr(rhapi, spoken_flag, sel_pilot_id=None):
 
 # Text replacer
 def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
+    if not isinstance(text, str):
+        return ''
     if '%' in text:
         race_results = rhapi.race.results
         heat_data = None
