@@ -525,6 +525,7 @@ class SecondaryNode:
                                         'speed_callout_flag': self.speedCalloutFlag,
                                         'name_callout_flag': self.nameCalloutFlag
                                     }
+                                    self._racecontext.race.add_split_speed_record(split_data)
                                     self._racecontext.rhui.emit_phonetic_split(split_data)
                                     eventStr = self.info.get('event')
                                     if eventStr and len(eventStr) > 0:
