@@ -1281,6 +1281,8 @@ class RHRace():
                 if lap_splits and len(lap_splits) > 0:
                     for lap_split in lap_splits:
                         self._racecontext.rhdata.clear_lapSplit(lap_split)
+                if deleted_lap_number is not None:  # move later splits down to match renumbered laps
+                    self._racecontext.rhdata.shift_lapSplits(node_index, deleted_lap_number + 1, -1)
             except:
                 logger.exception("Error deleting split laps")
 
@@ -1355,6 +1357,12 @@ class RHRace():
             lap_obj.late_lap = False
 
             self.calc_lap_times(node_index, lap_index)
+
+            try:  # move later splits up to match renumbered laps
+                if lap_obj.lap_number is not None:
+                    self._racecontext.rhdata.shift_lapSplits(node_index, lap_obj.lap_number, 1)
+            except:
+                logger.exception("Error shifting split laps")
 
             self._racecontext.events.trigger(Evt.LAP_RESTORE_DELETED, {
                 'node_index': node_index,

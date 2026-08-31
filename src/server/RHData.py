@@ -3676,6 +3676,21 @@ class RHData():
         self.commit()
         return True
 
+    def shift_lapSplits(self, node_index, from_lap_id, delta):
+        '''Shifts split lap ids to track laps renumbered by a lap delete or restore.'''
+        lap_splits = Database.LapSplit.query.filter(
+            Database.LapSplit.node_index == node_index,
+            Database.LapSplit.lap_id >= from_lap_id
+            ).all()
+        # apply lowest first when shifting down, highest first when shifting up,
+        #  so no row ever lands on a lap id still held by another
+        lap_splits.sort(key=lambda lap_split: lap_split.lap_id, reverse=(delta > 0))
+        for lap_split in lap_splits:
+            lap_split.lap_id += delta
+            Database.DB_session.flush()
+        self.commit()
+        return len(lap_splits)
+
     def clear_lapSplits(self):
         Database.DB_session.query(Database.LapSplit).delete()
         self.commit()
