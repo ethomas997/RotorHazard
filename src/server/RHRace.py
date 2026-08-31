@@ -1226,6 +1226,9 @@ class RHRace():
         '''Delete a false lap.'''
 
         with self._racecontext.rhdata.get_db_session_handle():  # make sure DB session/connection is cleaned up
+            # save lap number before it is cleared by the renumbering below
+            deleted_lap_number = self.node_laps[node_index][lap_index].lap_number
+
             # mark lap deleted
             self.node_laps[node_index][lap_index].deleted = True
 
@@ -1274,7 +1277,7 @@ class RHRace():
                 lap_following.lap_time_formatted = RHUtils.format_time_to_str(lap_following.lap_time, self._racecontext.serverconfig.get_item('UI', 'timeFormat'))
 
             try:  # delete any split laps for deleted lap
-                lap_splits = self._racecontext.rhdata.get_lapSplits_by_lap(node_index, lap_number)
+                lap_splits = self._racecontext.rhdata.get_lapSplits_by_lap(node_index, deleted_lap_number)
                 if lap_splits and len(lap_splits) > 0:
                     for lap_split in lap_splits:
                         self._racecontext.rhdata.clear_lapSplit(lap_split)
