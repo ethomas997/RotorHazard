@@ -128,7 +128,14 @@ class PageCache:
                         pilotraces = []
                         for pilotrace in self._racecontext.rhdata.get_savedPilotRaces_by_savedRaceMeta(race.id):
                             gevent.sleep(0.001)
+                            # use first recorded speed for each lap, by index among the non-deleted laps
+                            lap_speeds = {}
+                            for lap_split in self._racecontext.rhdata.get_savedRaceLapSplits_by_savedPilotRace(pilotrace.id):
+                                if lap_split.split_speed is not None and lap_split.lap_id not in lap_speeds:
+                                    lap_speeds[lap_split.lap_id] = lap_split.split_speed
+
                             laps = []
+                            lap_index = 0
                             for lap in self._racecontext.rhdata.get_savedRaceLaps_by_savedPilotRace(pilotrace.id):
                                 laps.append({
                                     'id': lap.id,
@@ -136,8 +143,11 @@ class PageCache:
                                     'lap_time': lap.lap_time,
                                     'lap_time_formatted': lap.lap_time_formatted,
                                     'source': lap.source,
-                                    'deleted': lap.deleted
+                                    'deleted': lap.deleted,
+                                    'speed': None if lap.deleted else lap_speeds.get(lap_index)
                                 })
+                                if not lap.deleted:
+                                    lap_index += 1
 
                             pilot_data = self._racecontext.rhdata.get_pilot(pilotrace.pilot_id)
                             if pilot_data:
