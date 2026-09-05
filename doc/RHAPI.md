@@ -1429,6 +1429,11 @@ Replace all laps of a seat in the current race, as the Marshal page does for the
 - `seat_index` (int): seat whose laps to replace
 - `laps` (list[dict]): replacement lap list, in order; each item requires `lap_time_stamp` and `lap_time` (both in milliseconds), and may also include `source` (default `LapSource.API`) and `deleted` (default `False`)
 
+#### race.last_race
+_Read only_
+Returns the saved-off copy of the most recent race as `RHRace`, or `None`. Set when the
+current race is cleared (after a save or a discard) and cleared when the next race is staged.
+
 #### race.results
 _Read only_
 Calculated race results. Returns `dict`.
