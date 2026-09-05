@@ -3897,6 +3897,23 @@ def getLastSpeedStr(rhapi, spoken_flag, sel_pilot_id=None):
     last_split = max(lap_splits, default=None, key=lambda s: s.split_time_stamp)
     return getSpeedSplitStr(rhapi, last_split, spoken_flag, sel_pilot_id)
 
+# per-pilot tokens that are filled only from a leaderboard row; a '_CALL' token is a whole
+#  spoken sentence so it gets an idle message, a value token is a fragment so it is cleared
+PILOT_CALL_TOKENS = ('%POSITION_CALL%', '%POSITION_PLACE_CALL%', '%TIME_BEHIND_CALL%',
+                     '%TIME_BEHIND_FINPLACE_CALL%', '%TIME_BEHIND_FINPOS_CALL%')
+PILOT_VALUE_TOKENS = ('%LAP_COUNT%', '%TOTAL_TIME%', '%TOTAL_TIME_LAPS%', '%FASTEST_LAP%',
+                      '%LAST_LAP%', '%AVERAGE_LAP%', '%FASTEST_SPEED%', '%LAST_SPEED%',
+                      '%POSITION%', '%POSITION_PLACE%', '%TIME_BEHIND%', '%CONSECUTIVE%')
+
+def clearPilotDataTokens(rhapi, text):
+    for token in PILOT_CALL_TOKENS:
+        if token in text:
+            text = text.replace(token, rhapi.__('There is no data for that pilot'))
+    for token in PILOT_VALUE_TOKENS:
+        if token in text:
+            text = text.replace(token, '')
+    return text
+
 # Text replacer
 def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
     if not isinstance(text, str):
@@ -3988,6 +4005,9 @@ def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
                 round_str = "{} {}".format(rhapi.__('Round'), round_str)
                 # %ROUND_CALL% : Current round number (with prompt)
                 text = text.replace('%ROUND_CALL%', round_str)
+            else:
+                text = text.replace('%ROUND%', '')
+                text = text.replace('%ROUND_CALL%', rhapi.__('There is no race in progress'))
 
         # %RACE_FORMAT% : Current race format
         if '%RACE_FORMAT%' in text:
@@ -4185,6 +4205,9 @@ def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
                             text = text.replace('%POSITION_CALL%', position_str)
 
                     break
+
+            # a pilot was named, so leave no token behind to be spoken as raw text
+            text = clearPilotDataTokens(rhapi, text)
 
         if '%LEADER' in text:
             if not leaderboard:
