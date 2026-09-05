@@ -3951,12 +3951,25 @@ def clearPilotDataTokens(rhapi, text):
             text = text.replace(token, '')
     return text
 
+def hasRaceResultsData(race_results):
+    if not race_results:
+        return False
+    lboard_name = race_results.get('meta', {}).get('primary_leaderboard', '')
+    # a cleared race still lists the heat's pilots, so test for laps rather than rows
+    return any(entry.get('laps') for entry in (race_results.get(lboard_name) or []))
+
 # Text replacer
 def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
     if not isinstance(text, str):
         return ''
     if '%' in text:
         race_results = rhapi.race.results
+        # a saved race is cleared from the current-race object, so fall back to the
+        #  saved-off copy of it until the next race is staged
+        last_race_obj = None if hasRaceResultsData(race_results) else rhapi.race.last_race
+        callout_results = race_results
+        if last_race_obj and last_race_obj.results:
+            callout_results = last_race_obj.results
         heat_data = None
 
         # %HEAT% : Current heat name or ID value
@@ -3989,7 +4002,7 @@ def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
                 text = text.replace('%PILOT%', pilot_name_str)
 
         if '%FASTEST_RACE_LAP' in text:
-            fastest_race_lap_data = race_results.get('meta', {}).get('fastest_race_lap_data')
+            fastest_race_lap_data = callout_results.get('meta', {}).get('fastest_race_lap_data')
             if fastest_race_lap_data:
                 if spoken_flag:
                     fastest_str = "{}, {}".format(fastest_race_lap_data['phonetic'][0],  # pilot name
@@ -4058,6 +4071,9 @@ def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
 
         if '%WINNER' in text:
             winner_str = rhapi.race.race_winner_phonetic if spoken_flag else rhapi.race.race_winner_name
+            if not winner_str and last_race_obj:
+                winner_str = last_race_obj.race_winner_phonetic if spoken_flag \
+                                 else last_race_obj.race_winner_name
             # %WINNER% : Pilot callsign for winner of race
             text = text.replace('%WINNER%', winner_str)
             # %WINNER_CALL% : Pilot callsign for winner of race (with prompt)
@@ -4174,10 +4190,11 @@ def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
         leaderboard = None
         node_idx_val = RHUtils.getNumericEntry(args, 'node_index', -1)
         if node_idx_val >= 0 and '%' in text:
-            lboard_name = race_results.get('meta', {}).get('primary_leaderboard', '')
-            leaderboard = race_results.get(lboard_name, [])
+            lboard_name = callout_results.get('meta', {}).get('primary_leaderboard', '')
+            # kept separate from 'leaderboard', which stays with the current race
+            pilot_leaderboard = callout_results.get(lboard_name, [])
 
-            for result in leaderboard:
+            for result in pilot_leaderboard:
                 if result.get('node') == node_idx_val:
                     # %LAP_COUNT% : Current lap number
                     text = text.replace('%LAP_COUNT%', str(result.get('laps')))
@@ -4379,6 +4396,9 @@ def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
         # %RACE_RESULT% : Race result status message (race winner or co-op result)
         if '%RACE_RESULT%' in text:
             result_str = rhapi.race.phonetic_status_msg if spoken_flag else rhapi.race.status_message
+            if not result_str and last_race_obj:
+                result_str = last_race_obj.phonetic_status_msg if spoken_flag \
+                                 else last_race_obj.status_message
             text = text.replace('%RACE_RESULT%', result_str if result_str else '')
 
         # %PILOTS_INTERVAL_#_SECS% : List of pilot callsigns separated by an interval of given number of seconds
