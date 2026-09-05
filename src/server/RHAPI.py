@@ -1270,6 +1270,10 @@ class RaceAPI():
         })
 
     @property
+    def last_race(self):
+        return self._racecontext.last_race
+
+    @property
     @callWithDatabaseWrapper
     def results(self):
         return self._racecontext.race.get_results()
