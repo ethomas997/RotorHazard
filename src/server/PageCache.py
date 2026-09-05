@@ -123,6 +123,9 @@ class PageCache:
             ))
             for heat in all_heats:
                 if self._racecontext.rhdata.savedRaceMetas_has_heat(heat.id):
+                    # a class format overrides the format saved with the race
+                    race_class = self._racecontext.rhdata.get_raceClass(heat.class_id)
+                    class_format_id = race_class.format_id if race_class else None
                     rounds = []
                     for race in self._racecontext.rhdata.get_savedRaceMetas_by_heat(heat.id):    
                         pilotraces = []
@@ -163,9 +166,12 @@ class PageCache:
                             })
 
                         results = self._racecontext.rhdata.get_results_savedRaceMeta(race)
+                        race_format = self._racecontext.rhdata.get_raceFormat(
+                                            class_format_id if class_format_id else race.format_id)
                         rounds.append({
                             'id': race.round_id,
                             'start_time_formatted': race.start_time_formatted,
+                            'format_name': race_format.name if race_format else None,
                             'nodes': pilotraces,
                             'leaderboard': results
                         })
