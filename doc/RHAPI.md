@@ -1362,6 +1362,11 @@ Add a lap record to the current race. Laps must be entered sequentially. No retu
 - `seat_index` (int): seat number on which to add lap
 - `timestamp` (int): timestamp of lap to add, in server monotonic time
 
+#### race.last_race
+_Read only_
+Returns the saved-off copy of the most recent race as `RHRace`, or `None`. Set when the
+current race is cleared (after a save or a discard) and cleared when the next race is staged.
+
 #### race.results
 _Read only_
 Calculated race results. Returns `dict`.

@@ -1191,6 +1191,10 @@ class RaceAPI():
         return self._racecontext.race.add_lap(seat, timestamp, LapSource.API)
 
     @property
+    def last_race(self):
+        return self._racecontext.last_race
+
+    @property
     @callWithDatabaseWrapper
     def results(self):
         return self._racecontext.race.get_results()
