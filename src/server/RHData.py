@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, MetaData, Table, inspect
 from sqlalchemy.exc import NoSuchTableError
 from datetime import datetime
 import os
+import re
 import traceback
 import shutil
 import json
@@ -3982,6 +3983,32 @@ PILOT_VALUE_TOKENS = ('%LAP_COUNT%', '%TOTAL_TIME%', '%TOTAL_TIME_LAPS%', '%FAST
                       '%LAST_LAP%', '%AVERAGE_LAP%', '%FASTEST_SPEED%', '%LAST_SPEED%',
                       '%POSITION%', '%POSITION_PLACE%', '%TIME_BEHIND%', '%CONSECUTIVE%')
 
+# tokens filled outside the per-pilot block; with the two lists above these cover every
+#  token 'doReplace' substitutes
+OTHER_TOKENS = ('%HEAT%', '%PILOT%', '%PILOTS%', '%LINEUP%', '%FREQS%',
+                '%ROUND%', '%ROUND_CALL%', '%RACE_FORMAT%',
+                '%RACE_TIME%', '%RACE_TIME_CALL%',
+                '%RACE_RESULT%', '%RACE_RESULT_CALL%',
+                '%WINNER%', '%WINNER_CALL%',
+                '%PREVIOUS_WINNER%', '%PREVIOUS_WINNER_CALL%',
+                '%LEADER%', '%LEADER_CALL%',
+                '%FASTEST_RACE_LAP%', '%FASTEST_RACE_LAP_CALL%',
+                '%FASTEST_RACE_SPEED%', '%FASTEST_RACE_SPEED_CALL%',
+                '%FASTEST_EVENT_LAP%', '%FASTEST_EVENT_LAP_CALL%',
+                '%FASTEST_EVENT_SPEED%', '%FASTEST_EVENT_SPEED_CALL%',
+                '%SPLIT_TIME%', '%SPLIT_SPEED%',
+                '%COOP_RACE_INFO%', '%COOP_RACE_LAP_TOTALS%',
+                '%CURRENT_TIME_AP%', '%CURRENT_TIME_24%',
+                '%CURRENT_TIME_SECS_AP%', '%CURRENT_TIME_SECS_24%')
+
+ALL_TOKENS = PILOT_CALL_TOKENS + PILOT_VALUE_TOKENS + OTHER_TOKENS
+
+def clearUnfilledTokens(text):
+    for token in ALL_TOKENS:
+        if token in text:
+            text = text.replace(token, '')
+    return text
+
 def replaceValueAndCallTokens(text, value_token, value_str, prompt_str):
     text = text.replace(value_token, value_str)
     if value_str:
@@ -4464,6 +4491,12 @@ def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
                         delay_sec_holder.clear()
                         delay_sec_holder.append(float(num_str))
                         text = getPilotsListStr(rhapi, ' . ', spoken_flag).split(' . ')
+
+        if isinstance(text, str) and '%' in text:
+            text = clearUnfilledTokens(text)
+            leftover = re.findall(r'%[A-Z_0-9]+%', text)
+            if leftover:
+                logger.warning("Unrecognised callout token(s): {}".format(leftover))
 
     return text
 

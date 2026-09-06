@@ -1,5 +1,7 @@
 '''python -m unittest discover'''
+import inspect
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -620,6 +622,32 @@ class ServerTest(unittest.TestCase):
         sensor.update()
         readings = sensor.getReadings()
         self.assertEqual(readings['counter']['value'], count+1)
+
+    def test_callout_tokens_registered(self):
+        # every token 'doReplace' substitutes must be in 'ALL_TOKENS', or it would survive
+        #  unfilled and be spoken as raw text
+        import RHData
+        src = inspect.getsource(RHData)
+        used = set(re.findall(r"\.replace\('(%[A-Z_0-9]+%)'", src))
+        # the shared helper takes the value token and derives its '_CALL' name at runtime
+        for token in re.findall(r"replaceValueAndCallTokens\(text, '(%[A-Z_0-9]+%)'", src):
+            used.add(token)
+            used.add(token[:-1] + '_CALL%')
+        self.assertTrue(used, 'found no callout tokens to check')
+        missing = sorted(used - set(RHData.ALL_TOKENS))
+        self.assertEqual(missing, [], 'callout tokens missing from ALL_TOKENS: ' + str(missing))
+        stale = sorted(set(RHData.ALL_TOKENS) - used)
+        self.assertEqual(stale, [], 'ALL_TOKENS entries no longer substituted: ' + str(stale))
+
+    def test_callout_tokens_documented(self):
+        # a token with no User Guide row is invisible to whoever writes the callouts
+        import RHData
+        doc_path = os.path.join(_SRC_DIR, '..', 'doc', 'User Guide.md')
+        with open(doc_path, encoding='utf-8') as doc_file:
+            doc_text = doc_file.read()
+        undocumented = sorted(t for t in RHData.ALL_TOKENS if t not in doc_text)
+        self.assertEqual(undocumented, [],
+                         'callout tokens missing from the User Guide: ' + str(undocumented))
 
         
 if __name__ == '__main__':
