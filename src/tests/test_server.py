@@ -853,6 +853,10 @@ class ServerTest(unittest.TestCase):
         import RHData
         src = inspect.getsource(RHData)
         used = set(re.findall(r"\.replace\('(%[A-Z_0-9]+%)'", src))
+        # the shared helper takes the value token and derives its '_CALL' name at runtime
+        for token in re.findall(r"replaceValueAndCallTokens\(text, '(%[A-Z_0-9]+%)'", src):
+            used.add(token)
+            used.add(token[:-1] + '_CALL%')
         self.assertTrue(used, 'found no callout tokens to check')
         missing = sorted(used - set(RHData.ALL_TOKENS))
         self.assertEqual(missing, [], 'callout tokens missing from ALL_TOKENS: ' + str(missing))
@@ -875,5 +879,6 @@ class ServerTest(unittest.TestCase):
         text = RHData.doReplace(server.RHAPI, 'Laps %LAP_COUNT% place %POSITION_CALL% done', {}, False)
         self.assertEqual(text, 'Laps  place  done')
 
+        
 if __name__ == '__main__':
     unittest.main()
