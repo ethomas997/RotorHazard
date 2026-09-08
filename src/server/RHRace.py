@@ -1561,6 +1561,8 @@ class RHRace():
                 self.status_message = ''
                 self.phonetic_status_msg = ''
                 logger.info("Race status msg:  <None>")
+                if self.win_status != previous_win_status:
+                    self._racecontext.rhui.emit_race_status()
                 return win_status_dict
 
             if win_status_dict['status'] == WinStatus.DECLARED:
@@ -1714,6 +1716,9 @@ class RHRace():
                 if self.win_status != WinStatus.NONE:
                     self._racecontext.rhui.emit_current_leaderboard()  # show current race status on leaderboard
 
+        # only on a change; this runs on every lap pass and lap edit
+        if self.win_status != previous_win_status:
+            self._racecontext.rhui.emit_race_status()
         return win_status_dict
 
 
