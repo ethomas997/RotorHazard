@@ -4165,6 +4165,15 @@ def hasRaceResultsData(race_results):
     # a cleared race still lists the heat's pilots, so test for laps rather than rows
     return any(entry.get('laps') for entry in (race_results.get(lboard_name) or []))
 
+def getPilotTimeStr(rhapi, result, key, spoken_flag):
+    # a pilot's time figure from a leaderboard row; zero means no laps, so no data
+    if not result.get(key + '_raw'):
+        return ''
+    if spoken_flag:
+        return RHUtils.format_phonetic_time_to_str(result[key + '_raw'],
+                                                  rhapi.config.get_item('UI', 'timeFormatPhonetic'))
+    return str(result.get(key, ''))
+
 def getSpokenTimeStr(rhapi, time_ms, tformat):
     # phonetic time, with an exact number of minutes said as '2 minutes' rather than '2 00'
     tenths = int(time_ms) // 100
@@ -4550,36 +4559,26 @@ def doReplace(rhapi, text, args, spoken_flag=False, delay_sec_holder=None):
                               (rhapi.__('laps') if lap_count_str != '1' else rhapi.__('lap')))
 
                     # %TOTAL_TIME% : Total time since start of race for pilot
-                    text = text.replace('%TOTAL_TIME%', RHUtils.format_phonetic_time_to_str( \
-                        result.get('total_time_raw'), rhapi.config.get_item('UI', 'timeFormatPhonetic')) \
-                                            if spoken_flag else str(result.get('total_time', '')))
+                    text = text.replace('%TOTAL_TIME%', getPilotTimeStr(rhapi, result, 'total_time', spoken_flag))
 
                     # %TOTAL_TIME_LAPS%: Total time since start of first lap for pilot
-                    text = text.replace('%TOTAL_TIME_LAPS%', RHUtils.format_phonetic_time_to_str( \
-                        result.get('total_time_laps_raw'), rhapi.config.get_item('UI', 'timeFormatPhonetic')) \
-                                            if spoken_flag else str(result.get('total_time_laps', '')))
+                    text = text.replace('%TOTAL_TIME_LAPS%', getPilotTimeStr(rhapi, result, 'total_time_laps', spoken_flag))
 
                     # %LAST_LAP% : Last lap time for pilot
                     # %LAST_LAP_CALL% : Last lap time for pilot (with prompt)
-                    lap_time_str = RHUtils.format_phonetic_time_to_str( \
-                        result.get('last_lap_raw'), rhapi.config.get_item('UI', 'timeFormatPhonetic')) \
-                                            if spoken_flag else str(result.get('last_lap', ''))
+                    lap_time_str = getPilotTimeStr(rhapi, result, 'last_lap', spoken_flag)
                     text = replaceValueAndCallTokens(text, '%LAST_LAP%', lap_time_str, \
                                                      rhapi.__('Last lap time'))
 
                     # %AVERAGE_LAP% : Average lap time for pilot
                     # %AVERAGE_LAP_CALL% : Average lap time for pilot (with prompt)
-                    lap_time_str = RHUtils.format_phonetic_time_to_str( \
-                        result.get('average_lap_raw'), rhapi.config.get_item('UI', 'timeFormatPhonetic')) \
-                                            if spoken_flag else str(result.get('average_lap', ''))
+                    lap_time_str = getPilotTimeStr(rhapi, result, 'average_lap', spoken_flag)
                     text = replaceValueAndCallTokens(text, '%AVERAGE_LAP%', lap_time_str, \
                                                      rhapi.__('Average lap time'))
 
                     # %FASTEST_LAP% : Fastest lap time for pilot
                     # %FASTEST_LAP_CALL% : Fastest lap time for pilot (with prompt)
-                    lap_time_str = RHUtils.format_phonetic_time_to_str( \
-                        result.get('fastest_lap_raw'), rhapi.config.get_item('UI', 'timeFormatPhonetic')) \
-                                            if spoken_flag else str(result.get('fastest_lap', ''))
+                    lap_time_str = getPilotTimeStr(rhapi, result, 'fastest_lap', spoken_flag)
                     text = replaceValueAndCallTokens(text, '%FASTEST_LAP%', lap_time_str, \
                                                      rhapi.__('Fastest lap time'))
 
