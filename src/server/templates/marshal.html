@@ -182,6 +182,7 @@
 			$('#recalc').prop('disabled', true);
 			$('#load-transitions').prop('disabled', true);
 			$('#save-transitions').prop('disabled', true);
+			$('#auto-calibrate').prop('disabled', true);
 
 			$('#race-title').html(__('Select Race'));
 			marshal.clearGraph();
@@ -201,6 +202,7 @@
 		$('#recalc').prop('disabled', false);
 		$('#load-transitions').prop('disabled', false);
 		$('#save-transitions').prop('disabled', false);
+		$('#auto-calibrate').prop('disabled', false);
 		$('#manual-lap-time').prop('disabled', false);
 		$('#add-lap').prop('disabled', false);
 		$('#clean-laps').prop('disabled', false);
@@ -405,6 +407,7 @@
 				marshal_type: msg.marshal_type
 			}
 			marshal.setPilotData(pilot_args);
+			$('#auto-calibrate').prop('hidden', msg.marshal_type == MARSHAL_TYPE.PASS_PEAK_ONLY);
 
 			marshal.initRace();
 
@@ -685,6 +688,16 @@
 			}
 		});
 
+		$('#auto-calibrate').click(function(){
+			if (race_loaded) {
+				if (!marshal.autoCalibrate()) {
+					push_message(__('Auto calibration found no gate passes in the RSSI data'));
+				}
+			} else {
+				push_message(__('No race loaded'));
+			}
+		});
+
 		// lap list hotkey
 		$(document).on('keyup', function(e) {
 			// keyboard shortcuts
@@ -756,6 +769,7 @@
 					<input type="number" id="exitat" value="" placeholder="{{ __('ExitAt') }}" disabled />
 					<button id="load-transitions" hidden disabled>{{ __('Load from Node') }}</button>
 					<button id="save-transitions" hidden disabled>{{ __('Save to Node') }}</button>
+					<button id="auto-calibrate" disabled>{{ __('Auto Adjust') }}</button>
 				</div>
 				<div class="control-block">
 					<h3>{{ __('Modify') }}</h3>

@@ -6,6 +6,26 @@ const MARSHAL_TYPE = {
 	PASS_PEAK_ONLY: 2,
 };
 
+const AUTO_CAL = {
+	MIN_SPAN: 15,             // RSSI span below which the history holds no usable signal
+	BAND_MARGIN: 2,           // lowest EnterAt tried is this far above the trace minimum
+	SCAN_EXIT_FRACTION: 0.25, // provisional ExitAt, as a fraction of the way from EnterAt to the minimum
+	MIN_BAND: 3,              // a steady band narrower than this (or the fraction below) is not a gate
+	MIN_BAND_FRACTION: 0.05,
+	WIDE_FRACTION: 0.75,      // bands at least this wide, relative to the widest, compete on pass count
+	BAND_POSITION: 2 / 3,     // EnterAt placed this far up the steady band
+	EXIT_GAP_FRACTION: 0.31,  // usual ExitAt gap below EnterAt, as a fraction of the way to the trace minimum
+	MAX_CROSSING_S: 20,       // a crossing longer than this is not a gate pass
+	HOLESHOT_WINDOW_S: 20,    // a crossing this soon after the start is the holeshot
+	HOLESHOT_SEARCH: 12,      // how far below the band to look for a weak holeshot
+	DEFAULT_MIN_LAP_MS: 5000, // gap between crossings treated as one pass when no minimum lap is set
+	NOISE_PENALTY: 5,         // per crossing too close to the previous one
+	OPEN_PENALTY: 8,          // a crossing left open or overlong
+	MERGED_RATIO: 1.6,        // a lap this many times the median is two passes merged
+	MERGED_PENALTY: 8,
+	CURRENT_COUNT_WEIGHT: 0.5,  // per lap of difference from the laps currently shown
+};
+
 class RHMarshal {
 	self = false;
 
@@ -434,6 +454,11 @@ class RHMarshal {
 	}
 
 	processRXData() {
+		self.race.calc_result = self.computeLaps(self.race.enter_at, self.race.exit_at);
+	}
+
+	computeLaps(enter_at, exit_at) {
+		// laps the crossing algorithm gives for the history with these thresholds
 		var last_lap_time_stamp = -Infinity;
 		var laps = [];
 		if (self.race.marshal_type == MARSHAL_TYPE.PASS_PEAK_ONLY || self.race.marshal_type == MARSHAL_TYPE.HYBRID_PASS_PEAK) {
@@ -445,7 +470,7 @@ class RHMarshal {
 
 				if (lap.lap_time_stamp < self.min_first_crossing_ms) {
 					lap.deleted = true;
-				} else if (lap.peak_rssi < self.race.enter_at) {
+				} else if (lap.peak_rssi < enter_at) {
 					lap.deleted = true;
 				} else {
 					lap.deleted = false;
@@ -467,15 +492,15 @@ class RHMarshal {
 			var peakLast = 0;
 			var startThreshLowerFlag = false;
 
-			var localEnter = self.race.enter_at
-			var localExit = self.race.exit_at
+			var localEnter = enter_at
+			var localExit = exit_at
 
 			// set lower EnterAt/ExitAt values at race start if configured
 			if (self.start_thresh_lower_amount > 0 && self.start_thresh_lower_duration > 0) {
-				var diffVal = (self.race.enter_at - self.race.exit_at) * self.start_thresh_lower_amount / 100;
+				var diffVal = (enter_at - exit_at) * self.start_thresh_lower_amount / 100;
 				if (diffVal > 0) {
-					localEnter = self.race.enter_at - diffVal;
-					localExit = self.race.exit_at - diffVal;
+					localEnter = enter_at - diffVal;
+					localExit = exit_at - diffVal;
 					startThreshLowerFlag = true;
 				}
 			}
@@ -487,13 +512,13 @@ class RHMarshal {
 				if (startThreshLowerFlag) {
 					// if initial pass recorded or past duration then restore EnterAt/ExitAt values
 					if (laps.length > 0 || time >= self.race.start_time + self.start_thresh_lower_duration + self.race.race_format.start_delay_max) {
-						localEnter = self.race.enter_at;
-						localExit = self.race.exit_at;
+						localEnter = enter_at;
+						localExit = exit_at;
 						startThreshLowerFlag = false;
 					}
 				}
 
-				if (!crossing && (rssi > self.race.enter_at)) {
+				if (!crossing && (rssi > enter_at)) {
 					crossing = true;
 					crossingStart = time;
 				}
@@ -508,7 +533,7 @@ class RHMarshal {
 				}
 
 				if (crossing) {
-					if (rssi < self.race.exit_at) {
+					if (rssi < exit_at) {
 						var lap_time_stamp = (((peakLast + peakFirst) / 2) - self.race.start_time) * 1000; // zero stamp within race
 
 						if (lap_time_stamp > 0) { // reject passes before race start
@@ -523,8 +548,10 @@ class RHMarshal {
 							};
 							if (lap_time_stamp < self.min_first_crossing_ms) {
 								lapdata.deleted = true;
+								lapdata.noise = true;
 							} else if (self.min_lap_behavior && lap_time_stamp < last_lap_time_stamp + self.min_lap_ms) {
 								lapdata.deleted = true;
+								lapdata.noise = true;
 							} else {
 								last_lap_time_stamp = lap_time_stamp;
 							}
@@ -545,7 +572,8 @@ class RHMarshal {
 					crossingEnd: crossingEnd,
 					lap_time_stamp: lap_time_stamp, // zero stamp within race
 					source: 2, // recalc
-					deleted: false
+					deleted: false,
+					open: true // crossing never closed
 				});
 			}
 		}
@@ -555,12 +583,13 @@ class RHMarshal {
 			var lap = laps[lap_i];
 			if (finished) {
 				lap.deleted = true;
+				lap.late = true;
 			} else if (!self.race.race_format.unlimited_time && lap.lap_time_stamp > (self.race.race_format.race_time_sec * 1000)) {
 				finished = true;
 			}
 		}
 
-		self.race.calc_result = laps;
+		return laps;
 	}
 
 	calcLaps() {
@@ -713,6 +742,168 @@ class RHMarshal {
 
 	mapRange(val, start, end){
 		return val * (end - start) / 1 + start;
+	}
+
+	// automatic calibration
+	autoCalibrate() {
+		var suggestion = self.suggestCalibration();
+		if (suggestion) {
+			self.setEnterExit(suggestion.enter, suggestion.exit);  // fills the fields and recalculates
+		}
+		return suggestion;
+	}
+
+	suggestCalibration() {
+		// EnterAt/ExitAt from the RSSI history: the widest run of EnterAt values over which the
+		//  pass count holds steady is the gate band, between the weakest pass and the ripple
+		var values = self.race.history_values || [];
+		var times = self.race.history_times || [];
+		if (values.length < 3 || values.length != times.length) {
+			return null;
+		}
+		var lo = Infinity, hi = -Infinity;
+		for (var i = 0; i < values.length; i++) {
+			lo = Math.min(lo, values[i]);
+			hi = Math.max(hi, values[i]);
+		}
+		if (hi - lo < AUTO_CAL.MIN_SPAN) {
+			return null;
+		}
+		var scan = {};
+		var plateaus = [];
+		var run = null;
+		for (var enter = hi - 1; enter > lo + AUTO_CAL.BAND_MARGIN; enter--) {
+			// a wide provisional ExitAt, so the bumps after a pass stay inside its crossing
+			var laps = self.computeLaps(enter, enter - Math.max(1, Math.round((enter - lo) * AUTO_CAL.SCAN_EXIT_FRACTION)));
+			scan[enter] = laps;
+			if (!laps.length || !self.crossingsUsable(laps)) {
+				run = null;
+				continue;
+			}
+			// passes and merged crossings must both hold for the band to continue; laps after the
+			//  race come and go with the landing, so they are left out
+			var noise = self.countNoiseCrossings(laps);
+			var count = laps.filter((lap) => !lap.late).length - noise;
+			if (run && run.count == count && run.noise == noise) {
+				run.low = enter;
+			} else {
+				run = {count: count, noise: noise, high: enter, low: enter};
+				plateaus.push(run);
+			}
+		}
+		// among the bands nearly as wide as the widest, the one with the most passes: a wide
+		//  lower band holds weaker real passes, since ripple would have broken it up
+		var widest = 0;
+		for (var i = 0; i < plateaus.length; i++) {
+			widest = Math.max(widest, plateaus[i].high - plateaus[i].low);
+		}
+		var band = null;
+		for (var i = 0; i < plateaus.length; i++) {
+			var p = plateaus[i];
+			if (p.high - p.low >= widest * AUTO_CAL.WIDE_FRACTION && (band === null || p.count > band.count)) {
+				band = p;  // the first found at a count is the higher, keeping more margin over the noise
+			}
+		}
+		if (band === null || band.high - band.low < Math.max(AUTO_CAL.MIN_BAND, (hi - lo) * AUTO_CAL.MIN_BAND_FRACTION)) {
+			return null;  // no steady band, so no gate passes stand out from the rest
+		}
+		var enter = band.low + Math.round((band.high - band.low) * AUTO_CAL.BAND_POSITION);
+		// a weak holeshot peaks at the top of the ripple; with no early crossing in the band, step
+		//  down to the first EnterAt that adds exactly one, early, and keeps the set clean
+		if (!self.hasEarlyCrossing(scan[enter])) {
+			for (var e = band.low - 1; e >= band.low - AUTO_CAL.HOLESHOT_SEARCH && scan[e]; e--) {
+				if (scan[e].filter((lap) => !lap.late).length - self.countNoiseCrossings(scan[e]) == band.count + 1 &&
+						self.hasEarlyCrossing(scan[e]) &&
+						self.crossingsUsable(scan[e]) && self.scoreCalibration(scan[e]) <= self.scoreCalibration(scan[enter])) {
+					enter = e;
+					break;
+				}
+			}
+		}
+		// ExitAt: of the values giving the cleanest laps (clear of the valleys within a crossing
+		//  and above the lowest point of any lap), the one nearest the usual gap below EnterAt
+		var cleanest = [];
+		var best_score = Infinity;
+		for (var exit = enter - 1; exit > lo; exit--) {
+			var laps = self.computeLaps(enter, exit);
+			if (!self.crossingsUsable(laps)) {
+				continue;
+			}
+			var score = self.scoreCalibration(laps);
+			if (score < best_score) {
+				best_score = score;
+				cleanest = [];
+			}
+			if (score == best_score) {
+				cleanest.push(exit);
+			}
+		}
+		if (!cleanest.length) {
+			return null;
+		}
+		var target = enter - Math.round((enter - lo) * AUTO_CAL.EXIT_GAP_FRACTION);
+		var exit = cleanest.reduce((a, b) => Math.abs(b - target) < Math.abs(a - target) ? b : a);
+		var laps = self.computeLaps(enter, exit);
+		return {enter: enter, exit: exit, score: best_score, laps: laps,
+			lap_count: laps.filter((lap) => !lap.deleted).length, band: [band.low, band.high]};
+	}
+
+	crossingsUsable(laps) {
+		// a crossing that never closes, or that lasts far longer than a gate pass, is the
+		//  threshold sitting in the ripple or the noise
+		return !laps.some((lap) => lap.open || lap.crossingEnd - lap.crossingStart > AUTO_CAL.MAX_CROSSING_S);
+	}
+
+	countNoiseCrossings(laps) {
+		// crossings within the minimum lap time of the previous one, plus any already deleted as such
+		var min_gap = self.min_lap_ms || AUTO_CAL.DEFAULT_MIN_LAP_MS;
+		var noise = 0;
+		var last_stamp = null;
+		for (var i = 0; i < laps.length; i++) {
+			if (laps[i].noise) {
+				noise++;
+			} else if (!laps[i].deleted) {
+				if (last_stamp !== null && laps[i].lap_time_stamp - last_stamp < min_gap) {
+					noise++;
+				}
+				last_stamp = laps[i].lap_time_stamp;
+			}
+		}
+		return noise;
+	}
+
+	hasEarlyCrossing(laps) {
+		return laps.some((lap) => !lap.deleted && lap.lap_time_stamp <= AUTO_CAL.HOLESHOT_WINDOW_S * 1000);
+	}
+
+	scoreCalibration(laps) {
+		// lower is better: crossings too close together to be laps, a crossing left open or
+		//  overlong, merged passes, and (lightly) a lap count away from the laps currently shown
+		var score = AUTO_CAL.NOISE_PENALTY * self.countNoiseCrossings(laps);
+		var stamps = [];
+		for (var i = 0; i < laps.length; i++) {
+			if (laps[i].open || laps[i].crossingEnd - laps[i].crossingStart > AUTO_CAL.MAX_CROSSING_S) {
+				score += AUTO_CAL.OPEN_PENALTY;
+			} else if (!laps[i].deleted) {
+				stamps.push(laps[i].lap_time_stamp);
+			}
+		}
+		var lap_times = [];
+		for (var i = 1; i < stamps.length; i++) {
+			lap_times.push(stamps[i] - stamps[i - 1]);
+		}
+		if (lap_times.length >= 3) {
+			var sorted = [...lap_times].sort((a, b) => a - b);
+			var median = sorted[Math.floor(sorted.length / 2)];
+			for (var i = 0; i < lap_times.length; i++) {
+				if (lap_times[i] > median * AUTO_CAL.MERGED_RATIO) {
+					score += AUTO_CAL.MERGED_PENALTY;
+				}
+			}
+		}
+		var current = self.race.laps.filter((lap) => !lap.deleted).length;
+		score += AUTO_CAL.CURRENT_COUNT_WEIGHT * Math.abs(stamps.length - current);
+		return score;
 	}
 
 	handleGraphInteractionStart(evt) {
