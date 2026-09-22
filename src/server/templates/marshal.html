@@ -182,6 +182,7 @@
 			$('#recalc').prop('disabled', true);
 			$('#load-transitions').prop('disabled', true);
 			$('#save-transitions').prop('disabled', true);
+			$('#auto-calibrate').prop('disabled', true);
 
 			$('#race-title').html(__('Select Race'));
 			marshal.clearGraph();
@@ -201,6 +202,7 @@
 		$('#recalc').prop('disabled', false);
 		$('#load-transitions').prop('disabled', false);
 		$('#save-transitions').prop('disabled', false);
+		$('#auto-calibrate').prop('disabled', false);
 		$('#manual-lap-time').prop('disabled', false);
 		$('#add-lap').prop('disabled', false);
 		$('#clean-laps').prop('disabled', false);
@@ -320,6 +322,17 @@
 			}
 		});
 
+		socket.on('calibration_suggestion', function (msg) {
+			if (!race_loaded || msg.pilotrace_id != current_race_data.pilotrace_id) {
+				return;  // a different race was loaded in the meantime
+			}
+			if (msg.enter_at === null) {
+				push_message(__('Auto calibration found no gate passes in the RSSI data'));
+			} else {
+				marshal.setEnterExit(msg.enter_at, msg.exit_at);  // fills the fields and recalculates
+			}
+		});
+
 		socket.on('format_data', function (msg) {
 			rotorhazard.event.race_formats = msg.formats;
 			populate_race_list();
@@ -405,6 +418,7 @@
 				marshal_type: msg.marshal_type
 			}
 			marshal.setPilotData(pilot_args);
+			$('#auto-calibrate').prop('hidden', msg.marshal_type == MARSHAL_TYPE.PASS_PEAK_ONLY);
 
 			marshal.initRace();
 
@@ -685,6 +699,17 @@
 			}
 		});
 
+		$('#auto-calibrate').click(function(){
+			if (race_loaded) {
+				socket.emit('suggest_calibration', {
+					'pilotrace_id': current_race_data.race_id !== null ? current_race_data.pilotrace_id : null,
+					'node': current_race_data.node_index,
+				});
+			} else {
+				push_message(__('No race loaded'));
+			}
+		});
+
 		// lap list hotkey
 		$(document).on('keyup', function(e) {
 			// keyboard shortcuts
@@ -756,6 +781,7 @@
 					<input type="number" id="exitat" value="" placeholder="{{ __('ExitAt') }}" disabled />
 					<button id="load-transitions" hidden disabled>{{ __('Load from Node') }}</button>
 					<button id="save-transitions" hidden disabled>{{ __('Save to Node') }}</button>
+					<button id="auto-calibrate" disabled>{{ __('Auto Adjust') }}</button>
 				</div>
 				<div class="control-block">
 					<h3>{{ __('Modify') }}</h3>
