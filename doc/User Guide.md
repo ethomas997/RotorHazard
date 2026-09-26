@@ -83,6 +83,7 @@ Classes are groups of heats and races that share common characteristics. Each cl
 Classes may be given a name and description in addition to other properties:
 - _Race Format_: if selected, this race format is force-applied to all races in the class
 - _Ranking_: method by which this class is ranked. May be extended by plugins
+- _Round Type_: determines how rounds are counted within the class; see [Round Types](#round-types)
 - _Rounds_: number of rounds after which RotorHazard considers the heat to be done; leave at 0 to continue running this class until another is manually chosen
 - _Advance Heat_: determines whether RotorHazard will automatically move to the next heat when a race in this class concludes
 
@@ -98,6 +99,16 @@ If any of the slots uses either "Heat" or "Class" method, or if "Auto Frequency"
 A dynamically seeded heat can be in the "Plan" or "Seeded" state. A newly created heat is in the Plan state, and a race cannot be run until the heat is seeded. You may seed a heat using the "Seed Now" button, which will pull the current results from any selected heats and classes to create pilot assignments. If "Auto Frequency" is on, slots (and frequencies) are also assigned during this step. Plan heats are seeded when selected on the [Run](#run) page. If you confirm the assignments shown, the heat becomes seeded. Seeded heats that have not yet been used to run a race can be switched back to the "Plan" state using the "Revert to Plan" button. Note that seeding is not deterministic; reseeding may not produce the same results.
 
 As you run races, classes and heats will become locked and cannot be modified. This protects saved race data from becoming invalid. You may unlock heats and classes to modify their data. If you do, you are rewriting race history for those heats and classes as if they were set up from the beginning. _If you wish to make a change to a heat going forward only and without affecting race history, duplicate the heat to create a new one._ Clearing races from the event will unlock all heats and classes.
+
+##### Round Types
+
+**Count races per heat** is the default. Each heat is a fixed lineup flown repeatedly, and its round number is the number of times it has been raced. Heats A, B and C run as A, B, C, A, B, C…, recording round 2 on the second pass.
+
+**Generate heat groups** treats each heat as belonging to a single round. You build the lineups once and RotorHazard duplicates them per round: saving a race creates a copy of that heat in the next round and deactivates the one just flown, unless the class has reached its _Rounds_ count. Each heat carries a group number, shown as "Round 1", "Round 2" and so on beside the heat name on the Format page, and heats advance in round order — all of round 1, then all of round 2.
+
+Use heat groups when rounds need to be editable individually: a later round's pilots can be changed without touching rounds already flown, and a round can be seeded from the previous one using the "Heat" or "Class" slot methods.
+
+Note that a heat added after racing has begun is created in round 1 and will repeat until it catches up with the others; to add pilots mid-event it is usually easier to rebuild the class's heats.
 
 #### Generators
 
