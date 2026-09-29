@@ -214,6 +214,8 @@ The "%COOP_RACE_INFO%" and "%COOP_RACE_LAP_TOTALS%" variables can be used in cal
 
 _Stored Data_ can be used to backup the current database (save to a file on the pi and prompt to download it) or restore events from stored data files
 
+_View Database_ shows the stored pilots, heats, classes, races and settings, and lists deleted race rounds that can be restored (see [Marshal](#marshal))
+
 _Reset_ may clear races, classes, heats, pilots, and race formats
 
 _Import_ uses plugins to extract data from files and fill event values
@@ -361,7 +363,7 @@ You may click on/touch the graph to set enter/exit points, activate recalculatio
 
 "Commit changes" when you are finished adjusting the race data to save it to the database and update the race results.
 
-"Delete This Round" removes the selected round of the heat, for all pilots, after a confirmation. Other rounds keep their numbers, and the next race in the heat reuses a round number that is no longer taken. When a heat in a class using heat groups loses its only race, the heat can be raced again. A copy of each deleted round is listed under "Deleted Races" on the View Database page (opened from _Data Management_ on the Format page when debug mode is enabled, or at `/database`), where "Restore" puts it back if its heat, round number, class, format and pilots still fit. Deleted rounds are cleared when races are reset.
+"Delete This Round" removes the selected round of the heat, for all pilots, after a confirmation. Other rounds keep their numbers, and the next race in the heat reuses a round number that is no longer taken. When a heat in a class using heat groups loses its only race, the heat can be raced again. A copy of each deleted round is listed under "Deleted Races" on the View Database page (opened from _Data Management_ on the Format page), where "Restore" puts it back if its heat, round number, class, format and pilots still fit. Deleted rounds are cleared when races are reset.
 
 <br/>
 
