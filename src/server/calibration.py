@@ -1001,7 +1001,6 @@ class Calibration:
                             'enter_at_level': pilotRace.enter_at,
                             'exit_at_level': pilotRace.exit_at
                         }
-                break
 
         # test for same class, same pilot, same node
         for race in races:
@@ -1017,7 +1016,6 @@ class Calibration:
                             'enter_at_level': pilotRace.enter_at,
                             'exit_at_level': pilotRace.exit_at
                         }
-                break
 
         # test for same pilot, same node
         for pilotRace in pilotRaces:
