@@ -676,7 +676,8 @@ def render_settings():
                            num_nodes=RaceContext.race.num_nodes,
                            server_messages=RaceContext.rhui.get_ui_server_messages_str(),
                            cluster_has_secondaries=(RaceContext.cluster and RaceContext.cluster.hasSecondaries()),
-                           node_fw_updatable=(RaceContext.interface.get_fwupd_serial_name()!=None),
+                           no_serial_ports_or_nodes=((not RaceContext.serverconfig.get_item('GENERAL', 'SERIAL_PORTS')) and \
+                                                     len(RaceContext.interface.nodes) <= 0),
                            is_raspberry_pi=RHUtils.is_sys_raspberry_pi())
 
 @APP.route('/advanced-settings')
@@ -4565,18 +4566,25 @@ def _do_init_rh_interface():
         logger.exception("Error initializing RH interface")
         return False
 
+# returns the "no receiver nodes found" UI message, with a link that opens the 'Select Nodes' popup
+def noNodesFoundMsgStr():
+    return __("No receiver nodes found") + "; " + __("add nodes using the") + \
+           " <a href=\"#\" class=\"select-nodes-link\">" + __("Select Nodes") + "</a> " + __("function")
+
 # expects the interfaces already cleared, as done at the start of 'rh_program_initialize()'
 def initialize_rh_interface():
     if not _do_init_rh_interface():
         return False
     if RaceContext.race.num_nodes == 0:
         logger.warning('*** WARNING: NO RECEIVER NODES FOUND ***')
-        RaceContext.rhui.set_ui_message(
-            'node',
-            __("No receiver nodes found"),
-            header='Warning',
-            subclass='none'
-            )
+        # (not shown with the "unable to communicate with node processor" warning)
+        if not RaceContext.rhui.is_ui_message_set('stm32'):
+            RaceContext.rhui.set_ui_message(
+                'node',
+                noNodesFoundMsgStr(),
+                header='Warning',
+                subclass='none'
+                )
     RaceContext.interface.pass_record_callback = pass_record_callback
     RaceContext.interface.new_enter_or_exit_at_callback = new_enter_or_exit_at_callback
     RaceContext.interface.node_crossing_callback = node_crossing_callback
@@ -4691,8 +4699,8 @@ def apply_serial_ports_change(old_ports, new_ports):
                 RaceContext.rhui.clear_ui_message('stm32')  # clear "unable to communicate with node processor" warning
             if RaceContext.race.num_nodes > 0:
                 RaceContext.rhui.clear_ui_message('node')
-            else:
-                RaceContext.rhui.set_ui_message('node', __("No receiver nodes found"), header='Warning', subclass='none')
+            elif not RaceContext.rhui.is_ui_message_set('stm32'):
+                RaceContext.rhui.set_ui_message('node', noNodesFoundMsgStr(), header='Warning', subclass='none')
             init_race_state()
             RaceContext.race.updateSeatColors()
             if BACKGROUND_THREADS_ENABLED:

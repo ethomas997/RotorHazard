@@ -1105,6 +1105,11 @@ main.page-home {
 	align-self: flex-start;
 }
 
+/* server messages (whose class names may match '.node') are not limited to the node-card width */
+.server-messages li {
+	max-width: none;
+}
+
 .node-controls {
 	margin-top: 0.25em;
 }

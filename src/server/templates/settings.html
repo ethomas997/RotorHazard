@@ -1092,6 +1092,11 @@
 			socket.emit('kill_server');
 		});
 
+		$('button#select_nodes').click(function (event) {
+			show_select_nodes_popup();
+			return false;
+		});
+
 		$('button#download_logs').click(function (event) {
 			setTimeout(
 				function() {
@@ -3093,9 +3098,10 @@
 			{% endif %}
 			<a href="/hardwarelog" class="debug button-like">{{ __('Server Log') }}</a>
 			<button id="download_logs">{{ __('Download Logs') }}</button>
-			{% if node_fw_updatable %}
-			<a href="/updatenodes" class="debug button-like">{{ __('Update Nodes') }}</a>
+			{% if no_serial_ports_or_nodes %}
+			<button id="select_nodes" type="button">{{ __('Select Nodes') }}</button>
 			{% endif %}
+			<a href="/updatenodes" class="debug button-like">{{ __('Update Nodes') }}</a>
 		</div>
 
 		<div id="download_logs_progress" class="priority-message-interrupt mfp-hide popup">

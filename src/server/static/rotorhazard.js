@@ -1779,6 +1779,21 @@ function show_serial_port_list_popup(title, button_text, skip_fn, select_fn) {
 	});
 }
 
+// lists the serial ports, with an 'Add' button for each that configures it (as on the Advanced Settings page)
+function show_select_nodes_popup() {
+	show_serial_port_list_popup(__('Select Nodes Port'), __('Add'), function (port) {
+		return port.configured ? __('Configured') : null;
+	}, function (port) {
+		save_serial_ports_config([port], [port]);
+	});
+}
+
+// 'Select Nodes' link in the "no receiver nodes found" server message
+$(document).on('click', '.select-nodes-link', function () {
+	show_select_nodes_popup();
+	return false;
+});
+
 function update_system_message_display() {
 	$('#message-count').html(system_messages.length);
 	$('#message-queue').empty();
