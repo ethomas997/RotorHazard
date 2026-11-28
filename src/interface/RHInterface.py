@@ -60,6 +60,13 @@ RHFEAT_STM32_MODE = 0x0004      # STM 32-bit processor running multiple nodes
 RHFEAT_JUMPTO_BOOTLDR = 0x0008  # JUMP_TO_BOOTLOADER command supported
 RHFEAT_IAP_FIRMWARE = 0x0010    # in-application programming of firmware supported
 
+# processor-type prefixes for ESP32 nodes that are flash-updated via esptool
+ESP32_FW_PROCTYPE_PREFIXES = ('Widscan58',)
+
+def is_esp32_fw_node(node):
+    proctype_str = getattr(node, 'firmware_proctype_str', None)
+    return bool(proctype_str) and proctype_str.startswith(ESP32_FW_PROCTYPE_PREFIXES)
+
 UPDATE_SLEEP = float(os.environ.get('RH_UPDATE_INTERVAL', '0.1')) # Main update loop delay
 MAX_RETRY_COUNT = 4 # Limit of I/O retries
 MAX_FREQUENCY_RETRY_COUNT = 4 # Limit of retries for frequency setting
@@ -187,6 +194,10 @@ class RHInterface(BaseHardwareInterface):
                 if (not self.fwupd_serial_obj) and hasattr(node, 'serial') and node.serial and \
                         (node.rhfeature_flags & (RHFEAT_STM32_MODE|RHFEAT_IAP_FIRMWARE)) != 0:
                     self.set_fwupd_serial_obj(node.serial)
+        # save port name of ESP32 node for update of firmware via esptool
+        if (not self.fwupd_serial_obj) and hasattr(node, 'serial') and node.serial and \
+                is_esp32_fw_node(node):
+            self.set_fwupd_serial_obj(node.serial)
 
     def discover_nodes(self, *args, **kwargs):
         kwargs['set_info_node_obj_fn'] = self.set_info_node_obj

@@ -191,6 +191,7 @@ from ClusterNodeSet import SecondaryNode, ClusterNodeSet, restore_secondary_pass
 import PageCache
 from util.ButtonInputHandler import ButtonInputHandler
 import util.stm32loader as stm32loader
+import util.esp32flasher as esp32flasher
 from interface_mapper import InterfaceMapper, InterfaceType
 
 # Events manager
@@ -266,6 +267,34 @@ ERROR_REPORT_INTERVAL_SECS = 600  # delay between comm-error reports to log
 
 IMDTABLER_JAR_NAME =  PROGRAM_DIR + '/static/IMDTabler.jar'
 NODE_FW_PATHNAME = "firmware/RH_S32_BPill_node.bin"
+# firmware packages for ESP32 nodes, by node processor-type prefix
+NODE_ESP32_FW_PATHNAMES = {"Widscan58": "firmware/widscan58_esp32c5.zip"}
+FWUPD_TYPE_ESP32 = 'ESP32'
+FWUPD_TYPE_S32BPILL = 'S32_BPill'
+# node board selected for firmware update (dict with 'port', 'type', 'version', 'proctype'), if any
+FwupdSelection = None
+# time to keep checking for a port that is missing (an ESP32 without firmware keeps restarting, so its USB port comes and goes)
+ESP32_PORT_WAIT_SECS = 3.0  # after a failed connection to a port that may be an ESP32
+FWUPD_PORT_WAIT_SECS = 2.0  # for the port selected for node firmware update
+
+# returns the node board selected for firmware update if its port is the current update port, else None
+def getFwupdSelection():
+    if FwupdSelection and RaceContext.interface.get_fwupd_serial_name() == FwupdSelection['port']:
+        return FwupdSelection
+    return None
+
+# sets the node board selected for firmware update
+def setFwupdSelection(portStr, typeStr, versionStr=None, proctypeStr=None):
+    global FwupdSelection
+    FwupdSelection = {'port': portStr, 'type': typeStr, 'version': versionStr, 'proctype': proctypeStr}
+
+# returns the serial port for node firmware update, or None if none is set or the port is not present
+def getFwupdPortStr():
+    import util.SerialPortInfo as SerialPortInfo
+    portStr = RaceContext.interface.get_fwupd_serial_name()
+    if portStr and not SerialPortInfo.port_present(portStr, FWUPD_PORT_WAIT_SECS):
+        return None
+    return portStr
 
 # check if 'log' directory owned by 'root' and change owner to 'pi' user if so
 if RHUtils.checkSetFileOwnerPi(log.LOG_DIR_NAME):
@@ -370,6 +399,27 @@ def getDefNodeFwUpdateUrl():
     try:
         if RaceContext.serverconfig.get_item('GENERAL', 'DEF_NODE_FWUPDATE_URL'):
             return RaceContext.serverconfig.get_item('GENERAL', 'DEF_NODE_FWUPDATE_URL')
+        fwupdSelection = getFwupdSelection()
+        # use firmware package for ESP32 node if one is connected or an ESP32 module was selected for update
+        try:
+            esp32PathStr = None
+            if fwupdSelection:
+                if fwupdSelection['type'] == FWUPD_TYPE_ESP32:
+                    esp32PathStr = next(iter(NODE_ESP32_FW_PATHNAMES.values()))
+            else:
+                curTypStr = RaceContext.interface.nodes[0].firmware_proctype_str if len(RaceContext.interface.nodes) else None
+                if curTypStr:
+                    for typPrefix, pathStr in NODE_ESP32_FW_PATHNAMES.items():
+                        if curTypStr.startswith(typPrefix):
+                            esp32PathStr = pathStr
+                            break
+            if esp32PathStr:
+                if RELEASE_VERSION.lower().find("dev") > 0:  # if "dev" server version then
+                    # use current "dev" firmware at URL (same location as S32_BPill firmware)
+                    return stm32loader.DEF_BINSRC_STR.rsplit('/', 1)[0] + '/' + os.path.basename(esp32PathStr)
+                return os.path.abspath(os.path.join(PROGRAM_DIR, os.pardir, os.pardir, esp32PathStr))
+        except Exception as ex:
+            logger.debug("Error checking node type for ESP32 firmware: " + str(ex))
         if RELEASE_VERSION.lower().find("dev") > 0:  # if "dev" server version then
             retStr = stm32loader.DEF_BINSRC_STR      # use current "dev" firmware at URL
         else:
@@ -378,7 +428,10 @@ def getDefNodeFwUpdateUrl():
                                                                os.pardir), NODE_FW_PATHNAME))
         # check if file with better-matching processor type (i.e., STM32F4) is available
         try:
-            curTypStr = RaceContext.interface.nodes[0].firmware_proctype_str if len(RaceContext.interface.nodes) else None
+            if fwupdSelection:
+                curTypStr = fwupdSelection['proctype']
+            else:
+                curTypStr = RaceContext.interface.nodes[0].firmware_proctype_str if len(RaceContext.interface.nodes) else None
             if curTypStr:
                 fwTypStr = getFwfileProctypeStr(retStr)
                 if fwTypStr and curTypStr != fwTypStr:
@@ -691,8 +744,10 @@ def render_imdtabler():
 @requires_auth
 def render_updatenodes():
     '''Route to update nodes page.'''
+    fwupdPortStr = getFwupdPortStr()
     return render_template('updatenodes.html',
-                           fw_src_str=getDefNodeFwUpdateUrl())
+                           fw_src_str=getDefNodeFwUpdateUrl() if fwupdPortStr else '',  # (blank if no port)
+                           fwupd_port_str=fwupdPortStr)
 
 @APP.route('/plugins')
 @requires_auth
@@ -3156,9 +3211,11 @@ def on_set_config(data):
             set(data['value'] or []) != set(old_serial_ports):
         logger.info("Serial ports change rejected because a race is in progress or not yet saved")
         return {'rejected': 'race'}  # (returned via ack callback)
-    RaceContext.serverconfig.set_item(data['section'], data['key'], data['value'])
+    serial_ports_flag = (data['section'] == 'GENERAL' and data['key'] == 'SERIAL_PORTS')
+    if not serial_ports_flag:  # (serial ports are saved after the connection check below)
+        RaceContext.serverconfig.set_item(data['section'], data['key'], data['value'])
     serial_ports_result = None
-    if data['section'] == 'GENERAL' and data['key'] == 'SERIAL_PORTS':
+    if serial_ports_flag:
         try:
             with SERIAL_PORTS_LOCK:
                 serial_ports_result = apply_serial_ports_change(old_serial_ports, data['value'])
@@ -3177,9 +3234,9 @@ def on_set_config(data):
                                    'attempted': added_ports,
                                    'failed': [port for port in added_ports if port not in open_ports],
                                    'restart_ports': opened_ports, 'error': True}
-        if serial_ports_result['failed']:  # an added port that yielded no node is not kept in the configuration
+        if serial_ports_result['failed']:  # an added port that yielded no node is not put in the configuration
             data['value'] = [port for port in data['value'] if port not in serial_ports_result['failed']]
-            RaceContext.serverconfig.set_item(data['section'], data['key'], data['value'])
+        RaceContext.serverconfig.set_item(data['section'], data['key'], data['value'])
         if serial_ports_result['restart']:
             RaceContext.serverstate.set_restart_required()
     if data['section'] == 'GENERAL' and data['key'] == 'ADMIN_SOCKET_AUTH':
@@ -3203,7 +3260,105 @@ def on_set_config(data):
     if serial_ports_result is not None:  # (returned via ack callback)
         return {'attempted': serial_ports_result['attempted'], 'failed': serial_ports_result['failed'],
                 'restart_ports': serial_ports_result.get('restart_ports', []),
+                'esp32_ports': serial_ports_result.get('esp32_ports', []),
                 'error': serial_ports_result.get('error', False)}
+
+@SOCKET_IO.on('setup_esp32_fwupd_port')
+@requires_socketio_auth
+@catchLogExceptionsWrapper
+def on_setup_esp32_fwupd_port(data):
+    '''Adds the given ESP32 serial port to the configuration and selects it for node firmware update;
+       returns (via ack callback) a dict with 'ok' (True if done)'''
+    import util.SerialPortInfo as SerialPortInfo
+    port = data.get('port') if data else None
+    if not port or not SerialPortInfo.is_espressif_usb_port(port, ESP32_PORT_WAIT_SECS):
+        logger.info("Serial port '{}' not set up for ESP32 firmware update, as no ESP32 module found there".format(port))
+        return {'ok': False}
+    if RaceContext.race.race_status != RaceStatus.READY:
+        return {'ok': False, 'rejected': 'race'}
+    serial_ports = list(RaceContext.serverconfig.get_item('GENERAL', 'SERIAL_PORTS') or [])
+    if port not in serial_ports:
+        serial_ports.append(port)
+        RaceContext.serverconfig.set_item('GENERAL', 'SERIAL_PORTS', serial_ports)
+        Events.trigger(Evt.CONFIG_SET, {
+            'section': 'GENERAL',
+            'key': 'SERIAL_PORTS',
+            'value': serial_ports,
+            })
+    RaceContext.interface.set_mock_fwupd_serial_obj(port)
+    setFwupdSelection(port, FWUPD_TYPE_ESP32)
+    logger.info("Serial port '{}' added and selected for ESP32 node firmware update".format(port))
+    return {'ok': True}
+
+# returns the type of node board for firmware update (ESP32 or S32_BPill) indicated by the given processor type
+def getFwupdTypeForProctype(proctypeStr):
+    if proctypeStr:
+        if proctypeStr.startswith(tuple(NODE_ESP32_FW_PATHNAMES)):
+            return FWUPD_TYPE_ESP32
+        if proctypeStr.upper().startswith('STM32'):
+            return FWUPD_TYPE_S32BPILL
+    return None
+
+@SOCKET_IO.on('select_fwupd_port')
+@requires_socketio_auth
+@catchLogExceptionsWrapper
+def on_select_fwupd_port(data):
+    '''Selects the given serial port for node firmware update if a node board (ESP32 or S32_BPill) is
+       validated there; returns (via ack callback) a dict with 'ok' (True if selected) and 'type' '''
+    import util.SerialPortInfo as SerialPortInfo
+    port = data.get('port') if data else None
+    rh_interface = RaceContext.interface.get_rh_interface()
+    if not port or not rh_interface:
+        return {'ok': False}
+    port_key = SerialPortInfo._norm_key(port)
+    # port already open for nodes: use the node there
+    open_nodes = list(rh_interface.nodes)
+    if rh_interface.info_node_obj and rh_interface.info_node_obj not in open_nodes:
+        open_nodes.append(rh_interface.info_node_obj)
+    for node in open_nodes:
+        serial_obj = getattr(node, 'serial', None)
+        if serial_obj is not None and SerialPortInfo._norm_key(serial_obj.port) == port_key:
+            typeStr = getFwupdTypeForProctype(node.firmware_proctype_str)
+            if not typeStr:
+                logger.info("Node on serial port '{}' (type={}) is not a node board that can be flash-updated".\
+                            format(port, node.firmware_proctype_str))
+                return {'ok': False}
+            rh_interface.set_fwupd_serial_obj(serial_obj)
+            setFwupdSelection(serial_obj.name, typeStr, node.firmware_version_str, node.firmware_proctype_str)
+            logger.info("Serial port '{}' selected for node firmware update ({}, open node)".format(port, typeStr))
+            return {'ok': True, 'type': typeStr}
+    # port not open: attempt connection to a node there, then close the port
+    import serial_node  #pylint: disable=import-error
+    info_nodes = []
+    probe_nodes = []
+    try:
+        with SERIAL_PORTS_LOCK:
+            probe_nodes = serial_node.discover(len(rh_interface.nodes), None, False, ports=[port], \
+                                               set_info_node_obj_fn=info_nodes.append)
+    except Exception as ex:
+        logger.info("Error connecting to serial port '{}': {}".format(port, ex))
+    found_node = (probe_nodes or info_nodes or [None])[0]
+    for node in probe_nodes + info_nodes:
+        try:
+            node.serial.close()
+        except Exception:
+            pass
+    typeStr = getFwupdTypeForProctype(found_node.firmware_proctype_str) if found_node else None
+    if typeStr:
+        versionStr = found_node.firmware_version_str
+        proctypeStr = found_node.firmware_proctype_str
+    elif (not found_node) and SerialPortInfo.is_espressif_usb_port(port, ESP32_PORT_WAIT_SECS):
+        typeStr = FWUPD_TYPE_ESP32  # ESP32 module without timer firmware
+        versionStr = proctypeStr = None
+    else:
+        logger.info("Unable to connect to or validate node board on serial port '{}'{}; no port selected".format(port, \
+                    (" (type={})".format(found_node.firmware_proctype_str) if found_node else "")))
+        return {'ok': False}
+    RaceContext.interface.set_mock_fwupd_serial_obj(port)
+    setFwupdSelection(port, typeStr, versionStr, proctypeStr)
+    logger.info("Serial port '{}' selected for node firmware update ({}{})".format(port, typeStr, \
+                (", version=" + versionStr) if versionStr else ""))
+    return {'ok': True, 'type': typeStr}
 
 @SOCKET_IO.on('list_serial_ports')
 @requires_socketio_auth
@@ -3565,11 +3720,135 @@ def get_pilotrace(data):
                 'marshal_type': pilotrace.marshal_type
             })
 
+# when a different port was selected for the update, removes configured serial ports that are not in use by nodes
+#  (non-operational), then adds the given firmware-update port to the configuration if no serial ports are
+#  configured and there are no nodes
+def configureFwupdPortIfNone(portStr):
+    import util.SerialPortInfo as SerialPortInfo
+    if portStr and getFwupdSelection():
+        rh_interface = RaceContext.interface.get_rh_interface()
+        open_ports = rh_interface.get_serial_port_names() if rh_interface else set()
+        configured = list(RaceContext.serverconfig.get_item('GENERAL', 'SERIAL_PORTS') or [])
+        port_key = SerialPortInfo._norm_key(portStr)
+        kept = [port for port in configured if port in open_ports or SerialPortInfo._norm_key(port) == port_key]
+        if kept != configured:
+            RaceContext.serverconfig.set_item('GENERAL', 'SERIAL_PORTS', kept)
+            Events.trigger(Evt.CONFIG_SET, {
+                'section': 'GENERAL',
+                'key': 'SERIAL_PORTS',
+                'value': kept,
+                })
+            logger.info("Non-operational serial port(s) {} removed from configuration (port '{}' selected for update)".\
+                        format([port for port in configured if port not in kept], portStr))
+    if portStr and not RaceContext.serverconfig.get_item('GENERAL', 'SERIAL_PORTS') and \
+            len(RaceContext.interface.nodes) <= 0:
+        check_serial_ports_appeared.seen_present.add(portStr)  # not opened as a node port while being updated
+        RaceContext.serverconfig.set_item('GENERAL', 'SERIAL_PORTS', [portStr])
+        Events.trigger(Evt.CONFIG_SET, {
+            'section': 'GENERAL',
+            'key': 'SERIAL_PORTS',
+            'value': [portStr],
+            })
+        logger.info("Serial port '{}' added to configuration (no serial ports were configured)".format(portStr))
+
+# returns (version, processor type) of firmware on the node board selected for update (None if unknown)
+def getFwupdCurrentVersionType(rhInterfaceObj):
+    fwupdSelection = getFwupdSelection()
+    if fwupdSelection:
+        return fwupdSelection['version'], fwupdSelection['proctype']
+    info_node = rhInterfaceObj.get_info_node_obj() if rhInterfaceObj else None
+    if info_node:
+        return info_node.firmware_version_str, info_node.firmware_proctype_str
+    return None, None
+
+# check ESP32 firmware package (.zip) and show info about it on the update-nodes page
+def check_esp32fw_package(fileStr):
+    try:
+        package = esp32flasher.load_package(fileStr)
+    except Exception as ex:
+        SOCKET_IO.emit('upd_set_info_text', "Error reading firmware package: {}<br><br><br><br>".format(ex))
+        logger.debug("Error reading package '{}' in 'check_esp32fw_package()': {}".format(fileStr, ex))
+        return
+    logger.debug("Node update firmware package: {}, size={}".format(package.summary_str(), package.total_size()))
+    infoStr = "{}: {}<br>{} = {} bytes<br><br>".format(__("Firmware update package"), package.summary_str(), \
+                                                      __("Firmware update size"), package.total_size())
+    if not getFwupdPortStr():
+        infoStr += __("No serial port is selected for the update; use 'Select Port' to select one")
+        SOCKET_IO.emit('upd_set_info_text', infoStr)
+        return
+    rhInterfaceObj = RaceContext.interface.get_rh_interface()
+    curVerStr, curTypStr = getFwupdCurrentVersionType(rhInterfaceObj)
+    if curVerStr:
+        infoStr += __("Current firmware version: ") + curVerStr + ((" (" + curTypStr + ")") if curTypStr else "")
+    else:
+        infoStr += __("Current firmware version: ") + __("(unknown)")
+    if curTypStr and not curTypStr.startswith(tuple(NODE_ESP32_FW_PATHNAMES)):
+        infoStr += "<br><br><b>{}</b>: ".format(__("Warning")) + \
+                   __("Firmware package chip type ({}) does not match current processor type ({})").\
+                   format(package.chip_family, curTypStr)
+    esptoolNeededFlag = esp32flasher.esptool_needs_install()
+    if esptoolNeededFlag:
+        infoStr += "<br><br>" + __("The 'esptool' package is needed and will be installed when 'Update' is clicked (requires internet access)")
+    SOCKET_IO.emit('upd_set_info_text', infoStr)
+    SOCKET_IO.emit('upd_set_esptool_needed', esptoolNeededFlag)
+    SOCKET_IO.emit('upd_enable_update_button')
+
+# flash ESP32 firmware package (.zip) to node via esptool, installing esptool if needed and allowed
+def do_esp32fw_update(srcStr, installFlag):
+    portStr = getFwupdPortStr()
+    msgStr = __("Performing ESP32 node update, port='{}', file: {}").format(portStr, srcStr)
+    logger.info(msgStr)
+    SOCKET_IO.emit('upd_messages_init', (msgStr + "\n"))
+    espLogger = logging.getLogger("esp32flasher")
+    def doEspLog(msgStr):  # send message to update-messages window and log file
+        SOCKET_IO.emit('upd_messages_append', msgStr)
+        gevent.idle()  # do thread yield to allow display updates
+        espLogger.info(msgStr)
+        gevent.idle()  # do thread yield to allow display updates
+        log.wait_for_queue_empty()
+    successFlag = False
+    restartFlag = False
+    try:
+        if not portStr:
+            raise RuntimeError("No serial port available for node update")
+        package = esp32flasher.load_package(srcStr)
+        doEspLog("Firmware package: " + package.summary_str())
+        if esp32flasher.esptool_needs_install():
+            if not installFlag:
+                raise RuntimeError("The 'esptool' package is not installed")
+            if not esp32flasher.install_esptool(doEspLog):
+                raise RuntimeError("Unable to install the 'esptool' package")
+        stop_background_threads()
+        gevent.sleep(0.1)
+        configureFwupdPortIfNone(portStr)
+        RaceContext.interface.close_fwupd_serial_port()
+        restartFlag = True
+        successFlag = esp32flasher.flash_package(portStr, package, doEspLog)
+    except RuntimeError as ex:
+        doEspLog("Error: " + str(ex))
+    except Exception as ex:
+        logger.exception("Error in 'do_esp32fw_update()'")
+        doEspLog("Error: " + str(ex))
+    msgStr = "Node update " + ("succeeded" if successFlag else "failed")
+    logger.info(msgStr)
+    msgStr = __("Node update") + " " + (__("succeeded") if successFlag else __("failed"))
+    SOCKET_IO.emit('upd_messages_append', ("\n" + msgStr))
+    gevent.sleep(0.2)
+    if restartFlag:
+        RaceContext.serverstate.set_restart_required(1.0)
+    SOCKET_IO.emit('upd_messages_finish', {'restart': restartFlag})  # show 'Close and Restart' or 'Close' button
+
 @SOCKET_IO.on('check_bpillfw_file')
 @requires_socketio_auth
 @catchLogExceptionsWrapper
 def check_bpillfw_file(data):
     fileStr = data['src_file_str']
+    if not (fileStr and fileStr.strip()):  # no file given; no file access
+        SOCKET_IO.emit('upd_set_info_text', "<br><br><br><br>")
+        return
+    if esp32flasher.is_fw_package_src(fileStr):
+        check_esp32fw_package(fileStr)
+        return
     logger.debug("Checking node firmware file: " + fileStr)
     dataStr = None
     try:
@@ -3610,17 +3889,24 @@ def check_bpillfw_file(data):
         if not rhInterfaceObj:
             infoStr = infoStr + "No updatable interfaces are available on this device";
             SOCKET_IO.emit('upd_set_info_text', infoStr)
+        elif not getFwupdPortStr():
+            infoStr += __("No serial port is selected for the update; use 'Select Port' to select one")
+            SOCKET_IO.emit('upd_set_info_text', infoStr)
         else:
-            info_node = rhInterfaceObj.get_info_node_obj()
+            fwupdSelection = getFwupdSelection()
+            info_node = rhInterfaceObj.get_info_node_obj() if not fwupdSelection else None
             curNodeStr = info_node.firmware_version_str if info_node else None
-            if curNodeStr:
+            curRTypStr = None
+            if fwupdSelection and fwupdSelection['version']:  # node board selected via 'Select Port'
+                curRTypStr = fwupdSelection['proctype']
+                curNodeStr = fwupdSelection['version'] + ((" (" + curRTypStr + ")") if curRTypStr else "")
+            elif curNodeStr:
                 tsStr = info_node.firmware_timestamp_str
                 if tsStr:
                     curRTypStr = info_node.firmware_proctype_str
                     ptStr = (curRTypStr + ", ") if curRTypStr else ""
                     curNodeStr += " ({}{}: {})".format(ptStr, __("Build timestamp"), tsStr)
             else:
-                curRTypStr = None
                 curNodeStr = "({})".format(__("(unknown)"))
             infoStr += __("Current firmware version: ") + curNodeStr
             if fwRTypStr and curRTypStr and fwRTypStr != curRTypStr:
@@ -3638,14 +3924,27 @@ def check_bpillfw_file(data):
 @catchLogExceptionsWrapper
 def do_bpillfw_update(data):
     srcStr = data['src_file_str']
+    if not (srcStr and srcStr.strip()):  # no file given (the loader would otherwise use its default URL)
+        logger.info("Node update not started, as no firmware file was specified")
+        return
+    if esp32flasher.is_fw_package_src(srcStr):
+        do_esp32fw_update(srcStr, data.get('install_esptool', False))
+        return
     portStr = RaceContext.interface.get_fwupd_serial_name()
+    if portStr and not getFwupdPortStr():  # update port is set but not present
+        logger.info("Node update not started, as serial port '{}' is not present".format(portStr))
+        return
     msgStr = __("Performing S32_BPill update, port='{}', file: {}").format(portStr, srcStr)
     logger.info(msgStr)
     SOCKET_IO.emit('upd_messages_init', (msgStr + "\n"))
     stop_background_threads()
     gevent.sleep(0.1)
     try:
-        jump_to_node_bootloader()
+        configureFwupdPortIfNone(portStr)
+        rhInterfaceObj = RaceContext.interface.get_rh_interface()
+        # node board selected on a port not open for nodes is not sent the jump command (it would go to the open nodes)
+        if not (getFwupdSelection() and rhInterfaceObj and portStr not in rhInterfaceObj.get_serial_port_names()):
+            jump_to_node_bootloader()
         RaceContext.interface.close_fwupd_serial_port()
         s32Logger = logging.getLogger("stm32loader")
         def doS32Log(msgStr):  # send message to update-messages window and log file
@@ -4210,17 +4509,31 @@ def _do_init_rh_interface():
                                     "get_info_node_obj") and RaceContext.interface.get_info_node_obj()):
                         logger.info("Unable to initialize serial node(s): {0}".format(
                             RaceContext.serverconfig.get_item('GENERAL', 'SERIAL_PORTS')))
-                        logger.info("If an S32_BPill board is connected, its processor may need to be flash-updated")
+                        logger.info("If a node board is connected, its processor may need to be flash-updated")
                         # enter serial port name so it's available for node firmware update
                         if getattr(RaceContext.interface, "set_mock_fwupd_serial_obj"):
-                            RaceContext.interface.set_mock_fwupd_serial_obj(
-                                RaceContext.serverconfig.get_item('GENERAL', 'SERIAL_PORTS')[0])
-                            RaceContext.rhui.set_ui_message('stm32', \
-                                           __("Server is unable to communicate with node processor") + ". " + \
-                                           __("If an S32_BPill board is connected, you may attempt to") + \
-                                           " <a href=\"/updatenodes\">" + __("flash-update") + "</a> " + \
-                                           __("its processor."), \
-                                           header='Warning', subclass='no-comms')
+                            import util.SerialPortInfo as SerialPortInfo
+                            serial_ports = RaceContext.serverconfig.get_item('GENERAL', 'SERIAL_PORTS')
+                            esp32_ports = [port for port in serial_ports if SerialPortInfo.is_espressif_usb_port(port, ESP32_PORT_WAIT_SECS)]
+                            if esp32_ports:  # ESP32 module (without timer firmware) on configured port
+                                RaceContext.interface.set_mock_fwupd_serial_obj(esp32_ports[0])
+                                setFwupdSelection(esp32_ports[0], FWUPD_TYPE_ESP32)
+                                logger.info("ESP32 module found on serial port '{}'; it may need to be flash-updated".\
+                                            format(esp32_ports[0]))
+                                RaceContext.rhui.set_ui_message('stm32', \
+                                               __("Server is unable to communicate with node processor") + ". " + \
+                                               __("An ESP32 module was detected; you may") + \
+                                               " <a href=\"/updatenodes\">" + __("flash-update") + "</a> " + \
+                                               __("it with timer firmware."), \
+                                               header='Warning', subclass='no-comms')
+                            else:
+                                RaceContext.interface.set_mock_fwupd_serial_obj(serial_ports[0])
+                                RaceContext.rhui.set_ui_message('stm32', \
+                                               __("Server is unable to communicate with node processor") + ". " + \
+                                               __("If a node board is connected, you may attempt to") + \
+                                               " <a href=\"/updatenodes\">" + __("flash-update") + "</a> " + \
+                                               __("its processor."), \
+                                               header='Warning', subclass='no-comms')
                 else:
                     logger.info("Unable to initialize specified serial node(s): {0}".format(
                         RaceContext.serverconfig.get_item('GENERAL', 'SERIAL_PORTS')))
@@ -4290,8 +4603,13 @@ def check_serial_ports_appeared():
         if present is None:
             return
         configured = list(RaceContext.serverconfig.get_item('GENERAL', 'SERIAL_PORTS') or [])
+        # port of ESP32 module (without timer firmware) selected for update is not opened as a node port,
+        #  as opening it resets the module
+        fwupdSelection = getFwupdSelection()
+        esp32_fwupd_port = fwupdSelection['port'] if fwupdSelection and fwupdSelection['type'] == FWUPD_TYPE_ESP32 \
+                                                     and not fwupdSelection['version'] else None
         appeared = [port for port in configured if port in present and \
-                    port not in check_serial_ports_appeared.seen_present]
+                    port not in check_serial_ports_appeared.seen_present and port != esp32_fwupd_port]
         check_serial_ports_appeared.seen_present = present
         if appeared:
             logger.info("Serial port(s) {} became available; trying to open".format(appeared))
@@ -4313,8 +4631,8 @@ def present_unopened_serial_ports():
 
 def apply_serial_ports_change(old_ports, new_ports):
     '''Opens added and closes removed serial ports without a server restart; returns a dict with
-       'restart' (True if restart is still needed), 'attempted' (added ports that were tried)
-       and 'failed' (attempted ports that yielded no node)'''
+       'restart' (True if restart is still needed), 'attempted' (added ports that were tried),
+       'failed' (attempted ports that yielded no node) and 'esp32_ports' (failed ports on ESP32 modules)'''
     import util.SerialPortInfo as SerialPortInfo
     old_ports = list(old_ports or [])
     new_ports = list(new_ports or [])
@@ -4387,7 +4705,10 @@ def apply_serial_ports_change(old_ports, new_ports):
     # an added port that yielded no node is not tried again by the periodic check until it disappears and reappears
     failed_ports = [port for port in added_ports if port not in rh_interface.get_serial_port_names()]
     check_serial_ports_appeared.seen_present.update(failed_ports)
-    return {'restart': False, 'attempted': added_ports + dup_ports, 'failed': failed_ports + dup_ports}
+    # failed ports on ESP32 modules (without timer firmware) can be set up for firmware update
+    esp32_ports = [port for port in failed_ports if SerialPortInfo.is_espressif_usb_port(port, ESP32_PORT_WAIT_SECS)]
+    return {'restart': False, 'attempted': added_ports + dup_ports, 'failed': failed_ports + dup_ports,
+            'esp32_ports': esp32_ports}
 
 # Create and save server/node information
 def buildServerInfo():

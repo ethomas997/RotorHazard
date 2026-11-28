@@ -1628,6 +1628,157 @@ function push_message(message, interrupt=false) {
 	$('#message-notification').prop('hidden', false);
 }
 
+/* serial-port setup (Advanced Settings and Settings pages) */
+
+// shows the given text in a notice popup (not an alert); returns the popup element
+function show_serial_port_popup(text) {
+	var popup_el = $('<div class="popup serial-port-notice">');
+	popup_el.append($('<h2>').text(__('Notice')));
+	$('<div class="popup-content">').append($('<p>').text(text)).appendTo(popup_el);
+	$.magnificPopup.open({
+		items: {
+			src: popup_el,
+			type: 'inline',
+		}
+	});
+	return popup_el;
+}
+
+// closes the given notice popup if it is still shown
+function close_serial_port_popup(popup_el) {
+	if (popup_el && $.magnificPopup.instance.isOpen && $.contains(document, popup_el[0])) {
+		$.magnificPopup.close();
+	}
+}
+
+// saves the given serial-ports list; for added ports a popup is shown while connecting and then the outcome
+//  (an ESP32 module without timer firmware is offered for flash-update); 'done_fn(result)' is called when finished
+function save_serial_ports_config(values, added, done_fn) {
+	var connecting_msg = null;
+	if (added.length) {
+		connecting_msg = show_serial_port_popup(
+			__('Connecting to serial port {0}...').replace('{0}', added.join(', ')));
+	}
+	var data = {
+		section: 'GENERAL',
+		key: 'SERIAL_PORTS',
+		value: values
+	};
+	socket.emit('set_config', data, function (result) {
+		if (result && result.rejected == 'race') {
+			close_serial_port_popup(connecting_msg);
+			show_serial_port_popup(__('Serial ports cannot be added or removed while a race is running or not yet saved. Save or discard the race first, then try again.'));
+		} else if (added.length) {
+			close_serial_port_popup(connecting_msg);
+			var messages = [];
+			var esp32_ports = (result && result.esp32_ports) || [];
+			var failed_ports = ((result && result.failed) || []).filter(function (port) {
+				return esp32_ports.indexOf(port) == -1;
+			});
+			if (failed_ports.length) {
+				messages.push(__('Unable to connect to a node on serial port {0}; the port was not added.').replace('{0}', failed_ports.join(', ')));
+			}
+			if (result && result.restart_ports && result.restart_ports.length) {
+				messages.push(__('Serial port {0} was added, but the server must be restarted to finish setting it up.').replace('{0}', result.restart_ports.join(', ')));
+			}
+			if (messages.length) {
+				show_serial_port_popup(messages.join(' '));
+			}
+			if (esp32_ports.length) {
+				confirm_esp32_flash_update(esp32_ports[0]);
+			}
+		}
+		if (done_fn) {
+			done_fn(result);
+		}
+	});
+}
+
+// asks before setting up an ESP32 module (without timer firmware) for flash-update; on OK the port is
+//  added and the Update Nodes page is shown, on Cancel the port is left out
+function confirm_esp32_flash_update(port) {
+	var popup_el = $('<div class="priority-message-interrupt popup serial-port-wide-popup">');
+	popup_el.append($('<h2>').text(__('ESP32 Module Detected')));
+	var content_el = $('<div class="popup-content">').appendTo(popup_el);
+	content_el.append($('<p>').text(__('An ESP32 module without timer firmware was detected on serial port {0}. The module will be flash-updated with timer firmware.').replace('{0}', port)));
+	var buttons_el = $('<p>').appendTo(content_el);
+	$('<button type="button">').text(__('OK')).on('click', function () {
+		$.magnificPopup.close();
+		socket.emit('setup_esp32_fwupd_port', {port: port}, function (result) {
+			if (result && result.ok) {
+				window.location.href = '/updatenodes';
+			} else if (result && result.rejected == 'race') {
+				show_serial_port_popup(__('Serial ports cannot be added or removed while a race is running or not yet saved. Save or discard the race first, then try again.'));
+			} else {
+				show_serial_port_popup(__('Unable to set up serial port {0} for flash-update.').replace('{0}', port));
+			}
+		});
+	}).appendTo(buttons_el);
+	buttons_el.append(' ');
+	$('<button type="button" class="cancel">').text(__('Cancel')).appendTo(buttons_el);
+	$.magnificPopup.open({
+		items: {
+			src: popup_el,
+			type: 'inline',
+		}
+	});
+}
+
+// shows a popup listing the serial ports, with a button (labeled 'button_text') for each port not excluded
+//  by 'skip_fn(port)' (which returns the text to show instead, or null); 'select_fn(port)' is called on click
+function show_serial_port_list_popup(title, button_text, skip_fn, select_fn) {
+	var popup_el = $('<div class="priority-message-interrupt popup serial-port-list-popup">');
+	popup_el.append($('<h2>').text(title));
+	var content_el = $('<div class="popup-content">').appendTo(popup_el);
+	var list_el = $('<div>').append($('<p>').text(__('Loading...'))).appendTo(content_el);
+	var buttons_el = $('<p>').appendTo(content_el);
+	$('<button type="button" class="cancel">').text(__('Cancel')).appendTo(buttons_el);
+	$.magnificPopup.open({
+		items: {
+			src: popup_el,
+			type: 'inline',
+		}
+	});
+	socket.emit('list_serial_ports', {}, function (msg) {
+		list_el.empty();
+		if (!msg || !msg.ports || !msg.ports.length) {
+			list_el.append($('<p>').text(msg ? __('No serial ports found') : __('Unable to list serial ports')));
+			return;
+		}
+		var table = $('<table class="serial-port-list-table">');
+		$('<tr>')
+			.append($('<th>').text(__('Port')))
+			.append($('<th>').text(__('Description')))
+			.append($('<th>').append($('<span class="screen-reader-text">').text(__('Actions'))))
+			.appendTo(table);
+		msg.ports.forEach(function (port) {
+			var row = $('<tr>').appendTo(table);
+			$('<td>').append($('<code>').text(port.device)).appendTo(row);
+			var desc = [];
+			if (port.description) desc.push(port.description);
+			if (port.serial_number) desc.push('S/N ' + port.serial_number);
+			if (port.vid && port.pid) desc.push('VID:PID ' + port.vid + ':' + port.pid);
+			$('<td>').text(desc.join(', ')).appendTo(row);
+			var action_cell = $('<td>').appendTo(row);
+			var skip_text = skip_fn ? skip_fn(port) : null;
+			if (skip_text) {
+				action_cell.text(skip_text);
+			} else {
+				$('<button type="button">')
+					.text(button_text)
+					.attr('title', port.recommended)
+					.attr('aria-label', button_text + ' ' + port.recommended)
+					.on('click', function () {
+						$.magnificPopup.close();
+						select_fn(port.recommended);
+					})
+					.appendTo(action_cell);
+			}
+		});
+		$('<div class="table-wrap">').append(table).appendTo(list_el);
+	});
+}
+
 function update_system_message_display() {
 	$('#message-count').html(system_messages.length);
 	$('#message-queue').empty();

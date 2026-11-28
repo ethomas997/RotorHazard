@@ -12,6 +12,7 @@ adapters, which resets Arduino-based nodes.
 import os
 import re
 import sys
+import time
 import logging
 
 logger = logging.getLogger(__name__)
@@ -118,17 +119,50 @@ def _process_info():
     return info
 
 
+ESPRESSIF_USB_VID = 0x303A
+# an ESP32 without firmware keeps restarting, so its USB port comes and goes every second or so
+RECENT_ESPRESSIF_SECS = 30.0  # time an Espressif port seen is expected to be present again
+PORT_RECHECK_SECS = 2.0  # time to keep checking for a port that is expected but missing
+PORT_RECHECK_INTERVAL_SECS = 0.2
+
+_recent_espressif_ports = {}  # port key -> time the Espressif port was last seen
+
+
 def _comports():
     try:
         from serial.tools import list_ports
     except ImportError:
         return None
     # include_links=False: aliases are collected separately so each device appears once
-    return list(list_ports.comports())
+    port_infos = list(list_ports.comports())
+    now = time.monotonic()
+    for port_info in port_infos:
+        if getattr(port_info, 'vid', None) == ESPRESSIF_USB_VID:
+            _recent_espressif_ports[_norm_key(port_info.device)] = now
+    return port_infos
 
 
-def port_present(port):
-    '''Returns True if the given serial port currently exists (without opening it).'''
+def _comports_with_recheck():
+    '''Returns the serial ports (as _comports()); if an Espressif port seen recently is missing,
+       checks again for a short time and adds it if it appears'''
+    port_infos = _comports()
+    if port_infos is None:
+        return None
+    found = {_norm_key(p.device): p for p in port_infos}
+    deadline = time.monotonic() + PORT_RECHECK_SECS
+    while True:
+        now = time.monotonic()
+        missing = [key for key, seen_time in _recent_espressif_ports.items() \
+                   if now - seen_time < RECENT_ESPRESSIF_SECS and key not in found]
+        if not missing or now >= deadline:
+            break
+        time.sleep(PORT_RECHECK_INTERVAL_SECS)
+        for port_info in _comports() or []:
+            found.setdefault(_norm_key(port_info.device), port_info)
+    return list(found.values())
+
+
+def _port_present_now(port):
     if not IS_WINDOWS:
         return bool(port) and os.path.exists(str(port).strip())
     try:
@@ -136,6 +170,36 @@ def port_present(port):
     except Exception:
         return False
     return bool(port_infos) and _norm_key(port) in (_norm_key(p.device) for p in port_infos)
+
+
+def port_present(port, wait_secs=0):
+    '''Returns True if the given serial port currently exists (without opening it); if 'wait_secs'
+       is given, a missing port is checked again for up to that time (for a port that comes and goes).'''
+    deadline = time.monotonic() + wait_secs
+    while True:
+        if _port_present_now(port):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(PORT_RECHECK_INTERVAL_SECS)
+
+
+def is_espressif_usb_port(port, wait_secs=0):
+    '''Returns True if the given serial port is the native USB port of an Espressif chip (such as an ESP32-C5),
+       without opening it; if 'wait_secs' is given, a missing port is checked again for up to that time.'''
+    deadline = time.monotonic() + wait_secs
+    while True:
+        try:
+            port_infos = _comports()
+        except Exception:
+            return False
+        key = _norm_key(port)  # (each time, as an alias such as /dev/serial/by-id/... resolves only while present)
+        for port_info in port_infos or []:
+            if _norm_key(port_info.device) == key:
+                return getattr(port_info, 'vid', None) == ESPRESSIF_USB_VID
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(PORT_RECHECK_INTERVAL_SECS)
 
 
 def list_serial_ports(configured_ports=None):
@@ -149,7 +213,7 @@ def list_serial_ports(configured_ports=None):
     configured_keys = {_norm_key(p): p for p in configured_ports}
 
     result = _process_info()
-    port_infos = _comports()
+    port_infos = _comports_with_recheck()
     result['pyserial'] = port_infos is not None
     port_infos = port_infos or []
 

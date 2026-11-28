@@ -619,6 +619,25 @@ dialog > button {
 	white-space: nowrap;
 }
 
+/* popups listing serial ports or showing a port name (wider than other popups, to fit port descriptions and names) */
+.popup.serial-port-list-popup,
+.popup.serial-port-wide-popup {
+	max-width: min(40em, calc(100% - 2rem));
+}
+
+.serial-port-wide-popup .popup-content p {
+	overflow-wrap: anywhere;
+}
+
+.serial-port-list-popup .serial-port-list-table td:last-child {
+	white-space: nowrap;
+}
+
+/* notice popups for serial ports (long port names are wrapped) */
+.serial-port-notice .popup-content p {
+	overflow-wrap: anywhere;
+}
+
 .serial-port-access-ok {
 	color: hsl(120, 60%, 30%);
 }

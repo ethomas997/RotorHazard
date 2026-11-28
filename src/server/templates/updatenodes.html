@@ -2,6 +2,8 @@
 
 <script type="text/javascript" charset="utf-8">
 	var upd_msgs_text = "";
+	var esptool_needed = false;
+	var fwupd_port_str = {{ fwupd_port_str|tojson }};
 
 	$(document).ready(function () {
 
@@ -9,26 +11,53 @@
 			$('#info_text').html(msg);
 		});
 
-		socket.on('upd_enable_update_button', function () {
-			$('button#do_update').prop('disabled', false);
+		socket.on('upd_set_esptool_needed', function (flag) {
+			esptool_needed = flag;
 		});
+
+		socket.on('upd_enable_update_button', function () {
+			if (fwupd_port_str) {  // (no update without a serial port)
+				$('button#do_update').prop('disabled', false);
+			}
+		});
+
+		// keeps the newest messages in view
+		function scroll_messages_to_end() {
+			window.scrollTo(0, document.body.scrollHeight);
+		}
 
 		socket.on('upd_messages_init', function (msg) {
 			upd_msgs_text = msg + "\n";
 			$('#upd_messages').html($('<div/>').text(upd_msgs_text).html());
+			$('#upd_messages_box').show();
+			scroll_messages_to_end();
 		});
 
 		socket.on('upd_messages_append', function (msg) {
 			upd_msgs_text = upd_msgs_text + msg + "\n";
 			$('#upd_messages').text(upd_msgs_text);
+			scroll_messages_to_end();
 		});
 
-		socket.on('upd_messages_finish', function () {
-			$('#close_button_div').html("<button id=\"close_and_restart\" class=\"debug button-like\">{{ __('Close and Restart') }}</button>")
-			$('button#close_and_restart').click(function (event) {
-				socket.emit('restart_server');
-				return false;
-			});
+		socket.on('upd_messages_finish', function (data) {
+			if (data && data.restart === false) {
+				$('#close_button_div').html("<button id=\"close_messages\" class=\"debug button-like\">{{ __('Close') }}</button>")
+				$('button#close_messages').click(function (event) {
+					upd_msgs_text = "";
+					$('#upd_messages').text("");
+					$('#upd_messages_box').hide();
+					$('#close_button_div').html("");
+					$('#src_file_str').trigger('focusout');  // check file again, which re-enables 'Update'
+					return false;
+				});
+			} else {
+				$('#close_button_div').html("<button id=\"close_and_restart\" class=\"debug button-like\">{{ __('Close and Restart') }}</button>")
+				$('button#close_and_restart').click(function (event) {
+					socket.emit('restart_server');
+					return false;
+				});
+			}
+			scroll_messages_to_end();
 		});
 
 		socket.on('server_restarting', function () {
@@ -36,26 +65,42 @@
 		});
 
 		$('button#do_update').click(function (event) {
-			$('button#do_update').prop('disabled', true);
 			var data = {
 				src_file_str: $('#src_file_str').val()
 			};
+			if (esptool_needed) {
+				data.install_esptool = true;
+			}
+			$('button#do_update').prop('disabled', true);
+			$('button#select_port').prop('disabled', true);  // (no port change once an update was started)
 			socket.emit('do_bpillfw_update', data);
 			return false;
 		});
 
 		$('#src_file_str').on("focusin", function(event) {
 			$('button#do_update').prop('disabled', true);
+			esptool_needed = false;
 			$('#info_text').html("<br><br><br><br>");
 		});
 
-		$('#src_file_str').on("focusout", function(event) {
+		// checks the firmware file named in the entry field (no file access if the field is blank)
+		function check_fw_file(user_flag) {
 			$('button#do_update').prop('disabled', true);
+			var src_file_str = $('#src_file_str').val();
+			if (!src_file_str.trim()) {
+				if (user_flag || fwupd_port_str) {
+					$('#info_text').html("<br><br><br><br>");
+				} else {
+					$('#info_text').html("{{ __('No serial port is selected for the update; use \'Select Port\' to select one') }}<br><br><br><br>");
+				}
+				return;
+			}
 			$('#info_text').html("{{ __('Checking firmware file') }}...<br><br><br><br>");
-			var data = {
-				src_file_str: $('#src_file_str').val()
-			};
-			socket.emit('check_bpillfw_file', data);
+			socket.emit('check_bpillfw_file', {src_file_str: src_file_str});
+		}
+
+		$('#src_file_str').on("focusout", function(event) {
+			check_fw_file(true);
 		});
 
 		$("#src_file_str").keyup(function(event) {
@@ -64,8 +109,29 @@
 			}
 		});
 
-		$('button#do_update').prop('disabled', true);
-		socket.emit('check_bpillfw_file', { src_file_str: $('#src_file_str').val() });
+		// connects to the given port and selects it if a node board (ESP32 or S32_BPill) is validated there
+		function select_fwupd_port(port) {
+			var connecting_msg = show_serial_port_popup(__('Connecting to serial port {0}...').replace('{0}', port));
+			socket.emit('select_fwupd_port', {port: port}, function (result) {
+				close_serial_port_popup(connecting_msg);
+				if (result && result.ok) {
+					window.location.reload();  // show the selected port and its default firmware file
+				} else {
+					show_serial_port_popup(__('Unable to connect to or validate a node board (ESP32-C5 or S32_BPill) on serial port {0}; no port was selected.').replace('{0}', port));
+				}
+			});
+		}
+
+		$('button#select_port').click(function (event) {
+			show_serial_port_list_popup(__('Select Port'), __('Select'), function (port) {
+				var selected_flag = fwupd_port_str && (port.device == fwupd_port_str || port.recommended == fwupd_port_str ||
+					(port.aliases || []).indexOf(fwupd_port_str) != -1);
+				return selected_flag ? __('Selected') : null;
+			}, select_fwupd_port);
+			return false;
+		});
+
+		check_fw_file(false);
 
 	});
 </script>
@@ -74,7 +140,11 @@
 <main class="page-updatenodes">
 <h2>{{ __('Update Node Firmware') }}</h2>
 <div id="top_text">
-	{{ __('The processor on the RotorHazard S32_BPill board will be flash-updated using the firmware file below') }}:
+	{% if fwupd_port_str %}
+	{{ __('The processor on the node board on "{0}" will be flash-updated using the firmware file below').replace('{0}', fwupd_port_str) }}:
+	{% else %}
+	{{ __('The processor on the node board will be flash-updated using the firmware file below') }}:
+	{% endif %}
 </div>
 <br />
 <input type="text" id="src_file_str" value="{{ fw_src_str }}" />
@@ -85,10 +155,11 @@
 </div>
 <br />
 <a href="/settings" class="debug button-like">{{ __('Cancel') }}</a>&nbsp;
+<button id="select_port" type="button">{{ __('Select Port') }}</button>&nbsp;
 <button id="do_update" class="btn-warning" disabled>{{ __('Update') }}</button>
 <br />
 <br />
-<pre>
+<pre id="upd_messages_box" style="display: none;">
 <div id="upd_messages"></div>
 </pre>
 <div id="close_button_div"></div>

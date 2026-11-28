@@ -13,6 +13,12 @@ from RHInterface import READ_REVISION_CODE, READ_MULTINODE_COUNT, MAX_RETRY_COUN
                         READ_FW_VERSION, READ_FW_BUILDDATE, READ_FW_BUILDTIME, FW_TEXT_BLOCK_SIZE, \
                         JUMP_TO_BOOTLOADER, READ_FW_PROCTYPE, SEND_STATUS_MESSAGE
 
+try:
+    from util.SerialPortInfo import is_espressif_usb_port
+except ImportError:
+    def is_espressif_usb_port(port):
+        return False
+
 BOOTLOADER_CHILL_TIME = 2 # Delay for USB to switch from bootloader to serial mode
 SERIAL_BAUD_RATES = [921600, 115200]
 SYS_DEV_DIR_PATH = "/dev/"
@@ -334,10 +340,14 @@ def discover(idxOffset, config, isS32BPillFlag=False, *args, ports=None, **kwarg
                 s32_port_flag = isS32BPillFlag if not (isinstance(comm, str) and "USB" in comm.upper()) else False
                 # if not S32_BPill then reverse list (try 115200 baud first as that is likely the baud rate to use)
                 baud_rates_list = SERIAL_BAUD_RATES if s32_port_flag else SERIAL_BAUD_RATES[::-1]
+                # native USB port of ESP32 ignores baud rate; try twice, so an ESP32 without timer firmware fails quickly
+                esp32_usb_flag = (not s32_port_flag) and is_espressif_usb_port(comm)
+                if esp32_usb_flag:
+                    baud_rates_list = baud_rates_list[:1]
                 rev_val = None
                 baud_idx = 0
                 while (not rev_val) and baud_idx < len(baud_rates_list):
-                    attempt_delay_secs = 0.0625
+                    attempt_delay_secs = 0.25 if esp32_usb_flag else 0.0625  # (0.25 gives two attempts)
                     # if opening port fails then do retries; with exponential delay, but less than 1 second
                     while (not rev_val) and attempt_delay_secs < 0.9:
                         attempt_delay_secs *= 2
@@ -446,6 +456,12 @@ def discover(idxOffset, config, isS32BPillFlag=False, *args, ports=None, **kwarg
                         logger.info("Receiver modules found at slot positions: " + slots_str)
                 else:
                     logger.log(fail_log_level, 'Unable to fetch revision code for serial node at "{0}"'.format(comm))
-            except IOError as ex:
+            except SERIAL_PORT_ERRORS as ex:  # (includes termios.error, as when a USB device goes away while probed)
                 logger.log(fail_log_level, "Error initializing configured serial node '{}':  {}".format(comm, ex))
+                if node_serial_obj and not any(getattr(node, 'serial', None) is node_serial_obj for node in nodes):
+                    try:
+                        node_serial_obj.close()
+                    except Exception:
+                        pass
+                    node_serial_obj = None
     return nodes
